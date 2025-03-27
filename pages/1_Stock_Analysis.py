@@ -5,8 +5,7 @@ import plotly.graph_objects as go
 import plotly.subplots as sp
 import numpy as np
 from datetime import datetime, timedelta
-# Technical analysis libraries
-import pandas_ta as ta
+# Technical analysis libraries - using only ta library, not pandas_ta
 from ta.trend import MACD, SMAIndicator, IchimokuIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands

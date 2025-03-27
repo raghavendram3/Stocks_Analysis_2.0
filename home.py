@@ -32,7 +32,7 @@ with col1:
     # Featured technical indicators
     with st.expander("Advanced Technical Analysis"):
         st.markdown("""
-        Includes Investopedia's top 7 technical analysis tools:
+        Includes popular technical analysis tools from Investopedia:
         - MACD (Moving Average Convergence Divergence)  
         - RSI (Relative Strength Index)
         - Bollinger Bands
