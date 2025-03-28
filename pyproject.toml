@@ -11,4 +11,7 @@ dependencies = [
     "streamlit>=1.44.0",
     "yfinance>=0.2.55",
     "ta>=0.11.0",
+    "scikit-learn>=1.6.1",
+    "prophet>=1.1.6",
+    "tensorflow>=2.14.0",
 ]

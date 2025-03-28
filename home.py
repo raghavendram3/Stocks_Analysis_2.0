@@ -16,11 +16,13 @@ with st.container():
     
     with col2:
         st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
-        nav_col1, nav_col2 = st.columns(2)
+        nav_col1, nav_col2, nav_col3 = st.columns(3)
         with nav_col1:
             st.page_link("home.py", label="Home", icon="🏠")
         with nav_col2:
             st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈")
+        with nav_col3:
+            st.page_link("pages/2_Predictive_Analytics.py", label="Predictions", icon="🔮")
 
 # Hero section
 st.markdown("""
@@ -98,15 +100,31 @@ st.markdown("""
 5. **Download Reports**: Save your analysis as CSV files for offline review
 """)
 
-# Future features
-st.header("🔮 Coming Soon")
-st.markdown("""
-- Multi-stock comparison tool
-- Portfolio tracking and analysis
-- Custom alerts and notifications
-- Backtesting capabilities for trading strategies
-- Machine learning forecasting models
-""")
+# Additional features
+st.header("✨ Available Features")
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("🔮 Predictive Analytics")
+    st.markdown("""
+    We've implemented advanced machine learning models to help forecast potential stock price movements:
+    
+    - **LSTM Neural Networks**: Deep learning time-series analysis
+    - **Facebook Prophet**: Statistical forecasting with confidence intervals
+    - **Model Comparison**: Compare different forecasting approaches
+    """)
+    st.page_link("pages/2_Predictive_Analytics.py", label="Try Price Predictions", icon="🔮")
+
+with col2:
+    st.subheader("🚀 Features Coming Soon")
+    st.markdown("""
+    We're constantly improving! Watch for these upcoming features:
+    
+    - Multi-stock comparison tool
+    - Portfolio tracking and analysis
+    - Custom alerts and notifications 
+    - Backtesting capabilities for trading strategies
+    """)
 
 # Footer
 st.markdown("---")

@@ -27,11 +27,13 @@ with st.container():
     
     with col2:
         st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
-        nav_col1, nav_col2 = st.columns(2)
+        nav_col1, nav_col2, nav_col3 = st.columns(3)
         with nav_col1:
             st.page_link("home.py", label="Home", icon="🏠")
         with nav_col2:
             st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈")
+        with nav_col3:
+            st.page_link("pages/2_Predictive_Analytics.py", label="Predictions", icon="🔮")
 
 # Function to get stock data
 @st.cache_data
@@ -1423,3 +1425,4 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### Navigation")
 st.sidebar.page_link("home.py", label="🏠 Home", icon="🏠")
 st.sidebar.page_link("pages/1_Stock_Analysis.py", label="📈 Stock Analysis", icon="📈")
+st.sidebar.page_link("pages/2_Predictive_Analytics.py", label="🔮 Predictions", icon="🔮")
