@@ -7,9 +7,8 @@ import plotly.express as px
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
 from prophet import Prophet
 import datetime
 
@@ -49,67 +48,86 @@ def load_stock_data(ticker, period="1y"):
     except Exception as e:
         return None, None, f"Error fetching data: {e}"
 
-# Function to prepare data for LSTM model
-def prepare_data_lstm(data, lookback=60, test_size=0.2, prediction_days=30):
-    """Prepare stock data for LSTM model training"""
+# Function to prepare data for ML model
+def prepare_data_ml(data, lookback=60, test_size=0.2, prediction_days=30):
+    """Prepare stock data for machine learning model training"""
     # Extract close price and convert to numpy array
     prices = data['Close'].values.reshape(-1, 1)
     
-    # Normalize the data
+    # Create features - we'll use several technical indicators as features
+    df_feat = data.copy()
+    
+    # Add some basic technical indicators as features
+    # Moving averages
+    df_feat['MA5'] = df_feat['Close'].rolling(window=5).mean()
+    df_feat['MA20'] = df_feat['Close'].rolling(window=20).mean()
+    
+    # Price momentum
+    df_feat['Price_Momentum'] = df_feat['Close'].pct_change(periods=5)
+    
+    # Volatility
+    df_feat['Volatility'] = df_feat['Close'].rolling(window=20).std()
+    
+    # Volume features
+    if 'Volume' in df_feat.columns:
+        df_feat['Volume_Change'] = df_feat['Volume'].pct_change()
+    
+    # Trading range
+    df_feat['High_Low_Range'] = (df_feat['High'] - df_feat['Low']) / df_feat['Close']
+    
+    # Drop NaN values
+    df_feat.dropna(inplace=True)
+    
+    # Scale the features
+    feature_columns = ['Close', 'MA5', 'MA20', 'Price_Momentum', 'Volatility', 'High_Low_Range']
+    if 'Volume' in df_feat.columns and 'Volume_Change' in df_feat.columns:
+        feature_columns.extend(['Volume', 'Volume_Change'])
+    
+    # Create normalized features
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(prices)
+    features = df_feat[feature_columns].values
+    scaled_features = scaler.fit_transform(features)
     
-    # Prepare training data
-    x_data = []
-    y_data = []
+    # Prepare data for machine learning
+    X = []
+    y = []
     
-    for i in range(lookback, len(scaled_data) - prediction_days):
-        x_data.append(scaled_data[i - lookback:i, 0])
-        y_data.append(scaled_data[i:i + prediction_days, 0])
+    # For each prediction day, create a target value (the price n days in the future)
+    dates = []
     
-    x_data, y_data = np.array(x_data), np.array(y_data)
-    x_data = np.reshape(x_data, (x_data.shape[0], x_data.shape[1], 1))
+    for i in range(len(scaled_features) - prediction_days):
+        X.append(scaled_features[i])
+        y.append(df_feat['Close'].iloc[i + prediction_days])
+        dates.append(df_feat.index[i + prediction_days])
     
-    # Split into train and test
-    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=test_size, shuffle=False)
+    X = np.array(X)
+    y = np.array(y)
     
-    return x_train, x_test, y_train, y_test, scaler, prices
+    # Split data into train and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
+    
+    return X_train, X_test, y_train, y_test, scaler, df_feat, dates, feature_columns
 
-# Function to build and train LSTM model
-def build_lstm_model(x_train, y_train, epochs=50, batch_size=32):
-    """Build and train LSTM model for stock prediction"""
-    # Initialize model
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
-    model.add(Dropout(0.2))
-    model.add(LSTM(units=50, return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(LSTM(units=50))
-    model.add(Dropout(0.2))
-    model.add(Dense(units=y_train.shape[1]))
-    
-    # Compile the model
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    
-    # Early stopping to prevent overfitting
-    early_stopping = EarlyStopping(
-        monitor='val_loss',
-        patience=10,
-        restore_best_weights=True
-    )
-    
-    # Train the model
-    with st.spinner("Training LSTM model (this may take a few minutes)..."):
-        history = model.fit(
-            x_train, y_train,
-            epochs=epochs,
-            batch_size=batch_size,
-            validation_split=0.2,
-            callbacks=[early_stopping],
-            verbose=0
+# Function to build and train ML model
+def build_ml_model(X_train, y_train):
+    """Build and train Random Forest model for stock prediction"""
+    # Initialize and train Random Forest model
+    with st.spinner("Training Random Forest model..."):
+        model = RandomForestRegressor(
+            n_estimators=100,
+            max_depth=20,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            random_state=42
         )
+        model.fit(X_train, y_train)
     
-    return model, history
+    # SVM model as a second option
+    with st.spinner("Training SVR model for comparison..."):
+        svr_model = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=0.1)
+        svr_model.fit(X_train, y_train)
+    
+    return model, svr_model
 
 # Function to prepare data for Prophet model
 def prepare_data_prophet(data):
@@ -176,7 +194,7 @@ with st.sidebar:
     
     model_type = st.radio(
         "Select Prediction Model",
-        ["LSTM (Deep Learning)", "Prophet (Statistical)", "Compare Both"]
+        ["ML (Machine Learning)", "Prophet (Statistical)", "Compare Both"]
     )
     
     st.markdown("---")
@@ -190,11 +208,19 @@ with st.sidebar:
 # Show information about ML models
 with st.expander("ℹ️ About the Prediction Models"):
     st.markdown("""
-    ### LSTM (Long Short-Term Memory)
-    LSTM is a type of recurrent neural network architecture designed to recognize patterns in sequences. It's particularly effective for time series data like stock prices because it can:
-    - Capture long-term dependencies in the data
-    - Handle the non-linear dynamics of stock markets
-    - Learn complex patterns that traditional models might miss
+    ### Machine Learning Models
+    Our app uses two powerful machine learning algorithms for time series prediction:
+    
+    #### Random Forest Regressor
+    - Ensemble method that combines multiple decision trees
+    - Handles non-linear relationships in stock data
+    - Robust against overfitting
+    - Captures complex patterns in price movements
+    
+    #### Support Vector Regression (SVR)
+    - Finds optimal boundaries in complex feature spaces
+    - Good at handling moderate dimensional data
+    - Excels at capturing general trends
     
     ### Prophet
     Developed by Facebook, Prophet is a procedure for forecasting time series data. It works best with:
@@ -257,89 +283,142 @@ if ticker_input:
                 st.warning("Not enough historical data for reliable predictions. Consider selecting a longer time period.")
             else:
                 # Different models based on user selection
-                if model_type == "LSTM (Deep Learning)" or model_type == "Compare Both":
-                    # LSTM model
-                    st.markdown("### LSTM Deep Learning Model")
+                if model_type == "ML (Machine Learning)" or model_type == "Compare Both":
+                    # ML model
+                    st.markdown("### Machine Learning Models")
                     
-                    # Prepare data for LSTM
+                    # Prepare data for ML models
                     try:
-                        lookback_period = min(60, len(hist) // 4)  # Use smaller lookback if not enough data
-                        x_train, x_test, y_train, y_test, scaler, prices = prepare_data_lstm(
+                        # Prepare data
+                        X_train, X_test, y_train, y_test, scaler, df_feat, dates, feature_columns = prepare_data_ml(
                             hist, 
-                            lookback=lookback_period, 
                             test_size=0.2,
                             prediction_days=prediction_days
                         )
                         
-                        # Build and train model
-                        lstm_model, history = build_lstm_model(
-                            x_train, 
-                            y_train,
-                            epochs=50,
-                            batch_size=32
-                        )
+                        # Build and train models
+                        rf_model, svr_model = build_ml_model(X_train, y_train)
                         
-                        # Plot training history
-                        hist_fig = px.line(
-                            x=range(len(history.history['loss'])),
-                            y=history.history['loss'],
-                            title='LSTM Training Loss',
-                            labels={'x': 'Epoch', 'y': 'Loss'}
-                        )
-                        hist_fig.add_scatter(x=range(len(history.history['val_loss'])), y=history.history['val_loss'], name='Validation Loss')
-                        st.plotly_chart(hist_fig, use_container_width=True)
+                        # Evaluate models on test data
+                        rf_predictions = rf_model.predict(X_test)
+                        svr_predictions = svr_model.predict(X_test)
                         
-                        # Make predictions on test data
-                        test_predictions = lstm_model.predict(x_test)
+                        # Calculate model performances
+                        rf_metrics = evaluate_model_performance(y_test, rf_predictions)
+                        svr_metrics = evaluate_model_performance(y_test, svr_predictions)
                         
-                        # Prepare data for future predictions
-                        latest_data = prices[-lookback_period:].flatten()
-                        # Scale the data using the same scaler
-                        scaled_data = scaler.transform(prices)
-                        x_future = np.array([scaled_data[-lookback_period:, 0]])
-                        x_future = np.reshape(x_future, (x_future.shape[0], x_future.shape[1], 1))
+                        # Create a metrics comparison
+                        metrics_df = pd.DataFrame({
+                            'Metric': list(rf_metrics.keys()),
+                            'Random Forest': [round(v, 4) for v in rf_metrics.values()],
+                            'SVR': [round(v, 4) for v in svr_metrics.values()]
+                        })
                         
-                        # Predict future values
-                        future_predictions = lstm_model.predict(x_future)
+                        # Display metrics
+                        st.subheader("Model Performance Metrics")
+                        st.dataframe(metrics_df, use_container_width=True)
                         
-                        # Inverse transform predictions
-                        test_predictions_orig = np.zeros((test_predictions.shape[0], test_predictions.shape[1], 1))
-                        for i in range(test_predictions.shape[0]):
-                            for j in range(test_predictions.shape[1]):
-                                test_predictions_orig[i, j, 0] = test_predictions[i, j]
+                        # Feature importance for Random Forest
+                        if len(feature_columns) > 1:
+                            st.subheader("Feature Importance (Random Forest)")
+                            importance = rf_model.feature_importances_
+                            # Create a DataFrame with feature names and importance values
+                            importance_df = pd.DataFrame({
+                                'Feature': feature_columns,
+                                'Importance': importance
+                            }).sort_values('Importance', ascending=False)
+                            
+                            fig = px.bar(importance_df, x='Feature', y='Importance', 
+                                        title='Feature Importance for Price Prediction')
+                            st.plotly_chart(fig, use_container_width=True)
                         
-                        test_predictions_orig = scaler.inverse_transform(test_predictions_orig.reshape(-1, 1))
+                        # Make future predictions
+                        # Get the most recent data point as a starting point
+                        latest_data = df_feat.iloc[-1:][feature_columns].values
+                        latest_price = df_feat['Close'].iloc[-1]
                         
-                        future_predictions_orig = scaler.inverse_transform(future_predictions.reshape(-1, 1))
+                        # For each future day, predict the price and update the feature set
+                        future_prices_rf = []
+                        future_prices_svr = []
                         
                         # Create future dates
                         last_date = hist.index[-1]
                         future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(prediction_days)]
+                        
+                        # Simple prediction approach (predict next 1 day at a time and use that for future)
+                        # This is a simplified approach - in real applications you'd want a more sophisticated method
+                        current_features = latest_data.copy()
+                        
+                        for i in range(prediction_days):
+                            # Predict the next day's price
+                            # Ensure the data is properly scaled and shaped
+                            current_features_scaled = scaler.transform(current_features)
+                            
+                            # Make predictions
+                            rf_pred = rf_model.predict(current_features_scaled)[0]
+                            svr_pred = svr_model.predict(current_features_scaled)[0]
+                            
+                            # Store predictions
+                            future_prices_rf.append(rf_pred)
+                            future_prices_svr.append(svr_pred)
+                            
+                            # Update features for next prediction (simplified)
+                            # In a real application, you'd need to update all time-dependent features
+                            # Here we're just updating the price features as a demo
+                            if 'Close' in feature_columns:
+                                close_idx = feature_columns.index('Close')
+                                current_features[0, close_idx] = rf_pred  # Using RF prediction to update
+                            
+                            # Update MA features if they exist
+                            if 'MA5' in feature_columns and 'Close' in feature_columns:
+                                ma5_idx = feature_columns.index('MA5')
+                                # Simple approximation for updating MA5
+                                if i >= 4:  # Have enough predicted prices to calculate a new MA5
+                                    current_features[0, ma5_idx] = np.mean(future_prices_rf[-5:])
+                            
+                            if 'MA20' in feature_columns and 'Close' in feature_columns:
+                                ma20_idx = feature_columns.index('MA20')
+                                # Simple approximation for updating MA20
+                                if i >= 19:  # Have enough predicted prices to calculate a new MA20
+                                    current_features[0, ma20_idx] = np.mean(future_prices_rf[-20:])
+                        
+                        # Convert predictions to numpy arrays
+                        future_predictions_rf = np.array(future_prices_rf)
+                        future_predictions_svr = np.array(future_prices_svr)
                         
                         # Plot predictions
                         fig = go.Figure()
                         
                         # Historical data
                         fig.add_trace(go.Scatter(
-                            x=hist.index,
-                            y=hist['Close'],
+                            x=hist.index[-90:],  # Last 90 days of historical data
+                            y=hist['Close'].iloc[-90:],
                             mode='lines',
                             name='Historical Data',
                             line=dict(color='blue')
                         ))
                         
-                        # Future predictions
+                        # Random Forest predictions
                         fig.add_trace(go.Scatter(
                             x=future_dates,
-                            y=future_predictions_orig.flatten(),
+                            y=future_predictions_rf,
                             mode='lines',
-                            name='LSTM Predictions',
+                            name='Random Forest Predictions',
                             line=dict(color='red', dash='dash')
+                        ))
+                        
+                        # SVR predictions
+                        fig.add_trace(go.Scatter(
+                            x=future_dates,
+                            y=future_predictions_svr,
+                            mode='lines',
+                            name='SVR Predictions',
+                            line=dict(color='green', dash='dot')
                         ))
                         
                         # Update layout
                         fig.update_layout(
-                            title=f"LSTM Model: {ticker_input} Stock Price Prediction (Next {prediction_days} Days)",
+                            title=f"Machine Learning Models: {ticker_input} Stock Price Prediction (Next {prediction_days} Days)",
                             xaxis_title="Date",
                             yaxis_title="Price ($)",
                             height=500,
@@ -349,51 +428,84 @@ if ticker_input:
                         st.plotly_chart(fig, use_container_width=True)
                         
                         # Show prediction summary
-                        st.markdown("#### LSTM Prediction Summary")
+                        st.markdown("#### Random Forest Prediction Summary")
                         
-                        # Calculate expected price changes
+                        # Calculate expected price changes (for Random Forest)
                         start_price = hist['Close'].iloc[-1]
-                        end_price = future_predictions_orig[-1][0]
-                        price_change = end_price - start_price
-                        price_change_pct = (price_change / start_price) * 100
+                        end_price_rf = future_predictions_rf[-1]
+                        price_change_rf = end_price_rf - start_price
+                        price_change_pct_rf = (price_change_rf / start_price) * 100
                         
-                        # Display predictions in columns
+                        # Display RF predictions in columns
                         pred_col1, pred_col2, pred_col3 = st.columns(3)
                         
                         with pred_col1:
                             st.metric(
                                 f"Price in {prediction_days} days", 
-                                f"${end_price:.2f}", 
-                                f"{price_change_pct:.2f}%"
+                                f"${end_price_rf:.2f}", 
+                                f"{price_change_pct_rf:.2f}%"
                             )
                         
                         with pred_col2:
-                            max_price = np.max(future_predictions_orig)
-                            max_day = np.argmax(future_predictions_orig) + 1
+                            max_price_rf = np.max(future_predictions_rf)
+                            max_day_rf = np.argmax(future_predictions_rf) + 1
                             st.metric(
                                 "Predicted Maximum Price", 
-                                f"${max_price:.2f}",
-                                f"Day {max_day}"
+                                f"${max_price_rf:.2f}",
+                                f"Day {max_day_rf}"
                             )
                         
                         with pred_col3:
-                            min_price = np.min(future_predictions_orig)
-                            min_day = np.argmin(future_predictions_orig) + 1
+                            min_price_rf = np.min(future_predictions_rf)
+                            min_day_rf = np.argmin(future_predictions_rf) + 1
                             st.metric(
                                 "Predicted Minimum Price", 
-                                f"${min_price:.2f}",
-                                f"Day {min_day}"
+                                f"${min_price_rf:.2f}",
+                                f"Day {min_day_rf}"
+                            )
+                        
+                        # Show SVR prediction summary
+                        st.markdown("#### SVR Prediction Summary")
+                        end_price_svr = future_predictions_svr[-1]
+                        price_change_svr = end_price_svr - start_price
+                        price_change_pct_svr = (price_change_svr / start_price) * 100
+                        
+                        # Display SVR predictions
+                        svr_col1, svr_col2, svr_col3 = st.columns(3)
+                        
+                        with svr_col1:
+                            st.metric(
+                                f"Price in {prediction_days} days", 
+                                f"${end_price_svr:.2f}", 
+                                f"{price_change_pct_svr:.2f}%"
+                            )
+                        
+                        with svr_col2:
+                            max_price_svr = np.max(future_predictions_svr)
+                            max_day_svr = np.argmax(future_predictions_svr) + 1
+                            st.metric(
+                                "Predicted Maximum Price", 
+                                f"${max_price_svr:.2f}",
+                                f"Day {max_day_svr}"
+                            )
+                        
+                        with svr_col3:
+                            min_price_svr = np.min(future_predictions_svr)
+                            min_day_svr = np.argmin(future_predictions_svr) + 1
+                            st.metric(
+                                "Predicted Minimum Price", 
+                                f"${min_price_svr:.2f}",
+                                f"Day {min_day_svr}"
                             )
                         
                         # Show detailed predictions in an expander
-                        with st.expander("View Detailed LSTM Predictions"):
+                        with st.expander("View Detailed ML Predictions"):
                             # Create a dataframe with future dates and predictions
                             future_df = pd.DataFrame({
-                                'Date': future_dates,
-                                'Predicted Price': future_predictions_orig.flatten()
+                                'Date': [d.date() for d in future_dates],
+                                'Random Forest Prediction': future_predictions_rf.round(2),
+                                'SVR Prediction': future_predictions_svr.round(2)
                             })
-                            future_df['Date'] = future_df['Date'].dt.date
-                            future_df['Predicted Price'] = future_df['Predicted Price'].round(2)
                             
                             # Display table
                             st.dataframe(future_df, use_container_width=True)
@@ -401,14 +513,14 @@ if ticker_input:
                             # Download option
                             csv = future_df.to_csv(index=False)
                             st.download_button(
-                                label="Download LSTM Predictions as CSV",
+                                label="Download ML Predictions as CSV",
                                 data=csv,
-                                file_name=f"{ticker_input}_lstm_predictions.csv",
+                                file_name=f"{ticker_input}_ml_predictions.csv",
                                 mime="text/csv"
                             )
                     
                     except Exception as e:
-                        st.error(f"Error in LSTM model training or prediction: {e}")
+                        st.error(f"Error in Machine Learning model training or prediction: {e}")
                         import traceback
                         st.code(traceback.format_exc())
                 
@@ -548,11 +660,11 @@ if ticker_input:
                 
                 # Add model comparison if both models were run
                 if model_type == "Compare Both":
-                    # Check if both models were successfully run
-                    lstm_success = 'future_predictions_orig' in locals() and 'future_dates' in locals()
+                    # Check if models were successfully run
+                    ml_success = 'future_predictions_rf' in locals() and 'future_dates' in locals()
                     prophet_success = 'forecast' in locals()
                     
-                    if lstm_success or prophet_success:
+                    if ml_success or prophet_success:
                         st.markdown("### Model Comparison")
                         
                         # Create combined plot
@@ -560,20 +672,20 @@ if ticker_input:
                         
                         # Historical data
                         fig.add_trace(go.Scatter(
-                            x=hist.index,
-                            y=hist['Close'],
+                            x=hist.index[-90:],  # Last 90 days of historical data
+                            y=hist['Close'].iloc[-90:],
                             mode='lines',
                             name='Historical Data',
                             line=dict(color='blue')
                         ))
                         
-                        # Add LSTM predictions if available
-                        if lstm_success:
+                        # Add ML predictions if available
+                        if ml_success:
                             fig.add_trace(go.Scatter(
                                 x=future_dates,
-                                y=future_predictions_orig.flatten(),
+                                y=future_predictions_rf,
                                 mode='lines',
-                                name='LSTM Predictions',
+                                name='Random Forest Predictions',
                                 line=dict(color='red', dash='dash')
                             ))
                         
@@ -602,7 +714,7 @@ if ticker_input:
                         **Important Note**: Discrepancies between models are normal and highlight the uncertainty in stock price prediction. 
                         Different models use different approaches:
                         
-                        - **LSTM**: Uses deep learning patterns from the entire price history
+                        - **Random Forest**: Uses ensemble learning to capture complex patterns in technical indicators
                         - **Prophet**: Uses time series decomposition focusing on seasonal patterns
                         
                         Consider using these predictions as just one of many factors in your investment decisions.
@@ -628,10 +740,10 @@ else:
     
     ### Available Models:
     
-    #### 🧠 LSTM (Long Short-Term Memory)
-    - Deep learning neural network specialized for time series
-    - Captures complex patterns and relationships in historical prices
-    - Provides detailed price forecasts
+    #### 🧠 Machine Learning Models
+    - **Random Forest**: Ensemble method that captures market patterns
+    - **SVR**: Support Vector Regression for price trend prediction
+    - Both models use technical indicators as features
     
     #### 📊 Prophet
     - Facebook's statistical forecasting model
@@ -639,7 +751,7 @@ else:
     - Includes confidence intervals for predictions
     
     #### 🔍 Model Comparison
-    - Compare predictions from both models side-by-side
+    - Compare predictions from different models side-by-side
     - Understand the range of possible outcomes
     - See where predictions agree or differ
     
