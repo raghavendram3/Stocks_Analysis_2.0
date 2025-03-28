@@ -13,14 +13,25 @@ from ta.volume import OnBalanceVolumeIndicator
 
 # Configure page
 st.set_page_config(
-    page_title="Stock Analysis Tool",
+    page_title="StockTrackPro - Stock Analysis",
     page_icon="📈",
     layout="wide"
 )
 
-# Header section
-st.title("📈 Stock Analysis Tool")
-st.markdown("Enter a stock symbol to get financial data visualization and basic investment tips.")
+# Header and navigation
+with st.container():
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("📈 Stock Analysis")
+        st.markdown("Get comprehensive financial data, technical indicators, and investment insights")
+    
+    with col2:
+        st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
+        nav_col1, nav_col2 = st.columns(2)
+        with nav_col1:
+            st.page_link("home.py", label="Home", icon="🏠")
+        with nav_col2:
+            st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈")
 
 # Function to get stock data
 @st.cache_data
@@ -1409,4 +1420,6 @@ else:
 
 # Add navigation back to home
 st.sidebar.markdown("---")
-st.sidebar.page_link("home.py", label="🏠 Back to Home", icon="🏠")
+st.sidebar.markdown("### Navigation")
+st.sidebar.page_link("home.py", label="🏠 Home", icon="🏠")
+st.sidebar.page_link("pages/1_Stock_Analysis.py", label="📈 Stock Analysis", icon="📈")
