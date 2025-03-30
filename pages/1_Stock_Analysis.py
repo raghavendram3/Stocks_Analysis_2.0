@@ -320,7 +320,7 @@ def calculate_technical_indicators(df):
         close=df_ta["Close"],
         window_slow=25,
         window_fast=13,
-        window_signal=13
+        fillna=True
     )
     df_ta["tsi"] = tsi.tsi()
     
