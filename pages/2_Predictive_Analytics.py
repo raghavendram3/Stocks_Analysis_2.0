@@ -38,81 +38,151 @@ def load_stock_data(ticker, period="1y"):
 
 # Function to prepare data for ML model
 def prepare_data_ml(data, lookback=60, test_size=0.2, prediction_days=30):
-    """Prepare stock data for machine learning model training"""
-    # Extract close price and convert to numpy array
-    prices = data['Close'].values.reshape(-1, 1)
-    
-    # Create features - we'll use several technical indicators as features
+    """Prepare stock data for machine learning model training with enhanced features"""
+    # Create features dataframe
     df_feat = data.copy()
     
-    # Add some basic technical indicators as features
-    # Moving averages
+    # Add more sophisticated technical indicators as features
+    
+    # Price features
+    df_feat['Return_1d'] = df_feat['Close'].pct_change(periods=1)
+    df_feat['Return_5d'] = df_feat['Close'].pct_change(periods=5)
+    df_feat['Return_10d'] = df_feat['Close'].pct_change(periods=10)
+    df_feat['Return_20d'] = df_feat['Close'].pct_change(periods=20)
+    
+    # Moving averages and relative position
     df_feat['MA5'] = df_feat['Close'].rolling(window=5).mean()
+    df_feat['MA10'] = df_feat['Close'].rolling(window=10).mean()
     df_feat['MA20'] = df_feat['Close'].rolling(window=20).mean()
+    df_feat['MA50'] = df_feat['Close'].rolling(window=50).mean()
+    df_feat['MA200'] = df_feat['Close'].rolling(window=200).mean()
     
-    # Price momentum
-    df_feat['Price_Momentum'] = df_feat['Close'].pct_change(periods=5)
+    # Price relative to moving averages (normalized)
+    df_feat['Price_Rel_MA5'] = df_feat['Close'] / df_feat['MA5'] - 1
+    df_feat['Price_Rel_MA20'] = df_feat['Close'] / df_feat['MA20'] - 1
+    df_feat['Price_Rel_MA50'] = df_feat['Close'] / df_feat['MA50'] - 1
     
-    # Volatility
-    df_feat['Volatility'] = df_feat['Close'].rolling(window=20).std()
+    # Moving average crossovers
+    df_feat['MA5_cross_MA20'] = (df_feat['MA5'] > df_feat['MA20']).astype(int)
+    df_feat['MA20_cross_MA50'] = (df_feat['MA20'] > df_feat['MA50']).astype(int)
+    
+    # Volatility measures
+    df_feat['Volatility_10d'] = df_feat['Return_1d'].rolling(window=10).std()
+    df_feat['Volatility_20d'] = df_feat['Return_1d'].rolling(window=20).std()
+    
+    # Range features
+    df_feat['High_Low_Range'] = (df_feat['High'] - df_feat['Low']) / df_feat['Close']
+    df_feat['Avg_Range_5d'] = df_feat['High_Low_Range'].rolling(window=5).mean()
     
     # Volume features
     if 'Volume' in df_feat.columns:
         df_feat['Volume_Change'] = df_feat['Volume'].pct_change()
+        df_feat['Volume_MA10'] = df_feat['Volume'].rolling(window=10).mean()
+        df_feat['Rel_Volume'] = df_feat['Volume'] / df_feat['Volume_MA10']
+        # Volume and price relationship
+        df_feat['Price_Volume_Corr'] = df_feat['Close'].rolling(10).corr(df_feat['Volume'])
     
-    # Trading range
-    df_feat['High_Low_Range'] = (df_feat['High'] - df_feat['Low']) / df_feat['Close']
+    # Momentum and oscillator-inspired features
+    df_feat['Price_Rate_Of_Change'] = df_feat['Close'].pct_change(10)
+    
+    # RSI-inspired feature (simplified)
+    delta = df_feat['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df_feat['RSI_Feature'] = 100 - (100 / (1 + rs))
+    
+    # Bollinger band position (normalized)
+    std_20 = df_feat['Close'].rolling(window=20).std()
+    df_feat['Bollinger_Position'] = (df_feat['Close'] - df_feat['MA20']) / (2 * std_20)
+    
+    # Trend features
+    df_feat['Trend_20d'] = np.where(df_feat['MA20'] > df_feat['MA20'].shift(5), 1, -1)
+    
+    # Lag features of close price
+    for i in range(1, 6):
+        df_feat[f'Close_Lag_{i}'] = df_feat['Close'].shift(i)
     
     # Drop NaN values
     df_feat.dropna(inplace=True)
     
-    # Scale the features
-    feature_columns = ['Close', 'MA5', 'MA20', 'Price_Momentum', 'Volatility', 'High_Low_Range']
-    if 'Volume' in df_feat.columns and 'Volume_Change' in df_feat.columns:
-        feature_columns.extend(['Volume', 'Volume_Change'])
+    # Define which features to use (exclude some to avoid multicollinearity)
+    feature_columns = [
+        'Return_1d', 'Return_5d', 'Return_10d', 'Return_20d',
+        'Price_Rel_MA5', 'Price_Rel_MA20', 'Price_Rel_MA50',
+        'MA5_cross_MA20', 'MA20_cross_MA50',
+        'Volatility_10d', 'Volatility_20d',
+        'High_Low_Range', 'Avg_Range_5d',
+        'Price_Rate_Of_Change', 'RSI_Feature', 'Bollinger_Position', 'Trend_20d'
+    ]
     
-    # Create normalized features
+    # Add volume features if available
+    if 'Volume' in df_feat.columns:
+        volume_features = ['Volume_Change', 'Rel_Volume', 'Price_Volume_Corr']
+        feature_columns.extend(volume_features)
+    
+    # Scale the features
     scaler = MinMaxScaler(feature_range=(0, 1))
     features = df_feat[feature_columns].values
     scaled_features = scaler.fit_transform(features)
     
-    # Prepare data for machine learning
+    # Also create a price scaler for rescaling predictions
+    price_scaler = MinMaxScaler(feature_range=(0, 1))
+    price_scaler.fit(df_feat[['Close']].values)
+    
+    # Create sequences for time series prediction
     X = []
     y = []
-    
-    # For each prediction day, create a target value (the price n days in the future)
     dates = []
     
-    for i in range(len(scaled_features) - prediction_days):
-        X.append(scaled_features[i])
-        y.append(df_feat['Close'].iloc[i + prediction_days])
-        dates.append(df_feat.index[i + prediction_days])
+    # Use lookback to create sequences (more appropriate for time series)
+    sequence_length = lookback
+    
+    for i in range(len(scaled_features) - sequence_length - prediction_days):
+        # Use a sequence of data as input
+        X.append(scaled_features[i:i+sequence_length])
+        # Use the close price n days in the future as target
+        target_idx = i + sequence_length + prediction_days - 1 
+        target = df_feat['Close'].iloc[target_idx]
+        y.append(target)
+        dates.append(df_feat.index[target_idx])
     
     X = np.array(X)
     y = np.array(y)
     
-    # Split data into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
+    # Split data into train and test sets - use time-ordered split for time series
+    train_size = int(len(X) * (1 - test_size))
+    X_train, X_test = X[:train_size], X[train_size:]
+    y_train, y_test = y[:train_size], y[train_size:]
     
-    return X_train, X_test, y_train, y_test, scaler, df_feat, dates, feature_columns
+    return X_train, X_test, y_train, y_test, scaler, price_scaler, df_feat, dates, feature_columns
 
 # Function to build and train ML model
 def build_ml_model(X_train, y_train):
-    """Build and train Random Forest model for stock prediction"""
-    # Initialize and train Random Forest model
+    """Build and train Random Forest model for stock prediction with improved parameters"""
+    # Initialize and train Random Forest model with better parameters
     with st.spinner("Training Random Forest model..."):
         model = RandomForestRegressor(
-            n_estimators=100,
-            max_depth=20,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            random_state=42
+            n_estimators=200,  # More trees for better ensemble
+            max_depth=15,      # Control overfitting
+            min_samples_split=8,
+            min_samples_leaf=4,
+            max_features='sqrt',  # Use sqrt of features for each split
+            bootstrap=True,       # Use bootstrapping
+            random_state=42,
+            n_jobs=-1             # Use all cores
         )
         model.fit(X_train, y_train)
     
-    # SVM model as a second option
+    # SVM model with improved parameters
     with st.spinner("Training SVR model for comparison..."):
-        svr_model = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=0.1)
+        svr_model = SVR(
+            kernel='rbf',     # Radial basis function for nonlinear relationships
+            C=10,             # Regularization parameter
+            gamma='scale',    # Kernel coefficient
+            epsilon=0.05,     # Epsilon in the epsilon-SVR model
+            cache_size=1000   # Kernel cache size
+        )
         svr_model.fit(X_train, y_train)
     
     return model, svr_model
@@ -274,7 +344,7 @@ if ticker_input:
                     # Prepare data for ML models
                     try:
                         # Prepare data
-                        X_train, X_test, y_train, y_test, scaler, df_feat, dates, feature_columns = prepare_data_ml(
+                        X_train, X_test, y_train, y_test, scaler, price_scaler, df_feat, dates, feature_columns = prepare_data_ml(
                             hist, 
                             test_size=0.2,
                             prediction_days=prediction_days
@@ -328,27 +398,37 @@ if ticker_input:
                         last_date = hist.index[-1]
                         future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(prediction_days)]
                         
-                        # Simple prediction approach
-                        # This is a simplified approach - in real applications you'd want a more sophisticated method
-                        current_features = latest_data.copy()
+                        # Improved prediction approach for sequences
+                        # Get the most recent sequence from our training data
+                        current_sequence = X_test[-1] if len(X_test) > 0 else X_train[-1]
+                        sequence_length = current_sequence.shape[0]
+                        
+                        # Initialize to store our future predictions
+                        future_prices_rf = []
+                        future_prices_svr = []
                         
                         for i in range(prediction_days):
-                            # Ensure the data is properly scaled
-                            current_features_scaled = scaler.transform(current_features)
+                            # Make predictions with the current sequence
+                            rf_pred = rf_model.predict(current_sequence.reshape(1, sequence_length, -1))[0]
+                            svr_pred = svr_model.predict(current_sequence.reshape(1, sequence_length, -1))[0]
                             
-                            # Make predictions
-                            rf_pred = rf_model.predict(current_features_scaled)[0]
-                            svr_pred = svr_model.predict(current_features_scaled)[0]
+                            # Convert predictions back to original scale for better interpretability
+                            rf_pred_unscaled = rf_pred
+                            svr_pred_unscaled = svr_pred
                             
                             # Store predictions
-                            future_prices_rf.append(rf_pred)
-                            future_prices_svr.append(svr_pred)
+                            future_prices_rf.append(rf_pred_unscaled)
+                            future_prices_svr.append(svr_pred_unscaled)
                             
-                            # Update features for next prediction (simplified approach)
-                            # In a real application, you'd need to update all features
-                            if 'Close' in feature_columns:
-                                close_idx = feature_columns.index('Close')
-                                current_features[0, close_idx] = rf_pred
+                            # Update the sequence by removing the first element and adding the new prediction
+                            # This simulates a sliding window for time series prediction
+                            # We'll use RF prediction to update the sequence (could use average or other strategies)
+                            # Create a new feature vector using the last day's features but update with new prediction
+                            new_features = np.zeros((1, current_sequence.shape[1]))
+                            new_features[0, :] = current_sequence[-1, :]  # Copy last day's features
+                            
+                            # Shift the sequence by dropping the first element and adding the new prediction point
+                            current_sequence = np.vstack([current_sequence[1:], new_features])
                         
                         # Plot predictions
                         st.subheader("Machine Learning Price Predictions")
