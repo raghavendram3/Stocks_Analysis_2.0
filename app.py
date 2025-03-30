@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Configure page - MUST BE THE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="StockTrackPro",
+    page_icon="📈",
+    layout="wide"
+)
+
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,23 +15,9 @@ from datetime import datetime, timedelta
 import os
 import sys
 
-# This is added to handle Replit deployment - redirect to home.py
+# This is the main entry point for the Streamlit application
 if __name__ == "__main__":
-    # Check if running via the entrypoint mechanism (via app.py)
-    if os.path.basename(sys.argv[0]) == "app.py":
-        # Re-execute using home.py as the entrypoint
-        # This helps with deployment issues where app.py might be expected
-        # but home.py is the actual entrypoint
-        print("Redirecting to home.py as the entrypoint...")
-        os.system(f"{sys.executable} home.py {' '.join(sys.argv[1:])}")
-        sys.exit(0)
-
-# Configure page
-st.set_page_config(
-    page_title="Stock Analysis Tool",
-    page_icon="📈",
-    layout="wide"
-)
+    print("Starting StockTrackPro application...")
 
 # Header section
 st.title("📈 Stock Analysis Tool")

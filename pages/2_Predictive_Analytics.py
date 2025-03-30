@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Configure page - MUST BE THE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="StockTrackPro - Predictive Analytics",
+    page_icon="🔮",
+    layout="wide"
+)
+
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -11,13 +19,6 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
 from prophet import Prophet
 import datetime
-
-# Configure page
-st.set_page_config(
-    page_title="StockTrackPro - Predictive Analytics",
-    page_icon="🔮",
-    layout="wide"
-)
 
 # Header and navigation
 with st.container():

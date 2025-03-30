@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Configure page
+# Configure page - MUST BE THE FIRST STREAMLIT COMMAND
 st.set_page_config(
     page_title="StockTrackPro",
     page_icon="📈",
@@ -18,11 +18,11 @@ with st.container():
         st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
         nav_col1, nav_col2, nav_col3 = st.columns(3)
         with nav_col1:
-            st.page_link("home.py", label="Home", icon="🏠")
+            st.button("Home", key="home_btn", use_container_width=True)
         with nav_col2:
-            st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈")
+            st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈", use_container_width=True)
         with nav_col3:
-            st.page_link("pages/2_Predictive_Analytics.py", label="Predictions", icon="🔮")
+            st.page_link("pages/2_Predictive_Analytics.py", label="Predictions", icon="🔮", use_container_width=True)
 
 # Hero section
 st.markdown("""
@@ -55,7 +55,7 @@ with col1:
     """, unsafe_allow_html=True)
     
     # Call to action
-    st.page_link("pages/1_Stock_Analysis.py", label="Start Analyzing Stocks", icon="📈")
+    st.page_link("pages/1_Stock_Analysis.py", label="Start Analyzing Stocks", icon="📈", use_container_width=True)
 
 with col2:
     st.markdown("""
@@ -113,7 +113,7 @@ with col1:
     - **Facebook Prophet**: Statistical forecasting with confidence intervals
     - **Model Comparison**: Compare different forecasting approaches
     """)
-    st.page_link("pages/2_Predictive_Analytics.py", label="Try Price Predictions", icon="🔮")
+    st.page_link("pages/2_Predictive_Analytics.py", label="Try Price Predictions", icon="🔮", use_container_width=True)
 
 with col2:
     st.subheader("🚀 Features Coming Soon")

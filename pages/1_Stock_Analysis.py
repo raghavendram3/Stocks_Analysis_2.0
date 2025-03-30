@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Configure page - MUST BE THE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="StockTrackPro - Stock Analysis",
+    page_icon="📈",
+    layout="wide"
+)
+
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,13 +18,6 @@ from ta.trend import MACD, SMAIndicator, IchimokuIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
-
-# Configure page
-st.set_page_config(
-    page_title="StockTrackPro - Stock Analysis",
-    page_icon="📈",
-    layout="wide"
-)
 
 # Header and navigation
 with st.container():
