@@ -55,7 +55,6 @@ def prepare_data_ml(data, lookback=60, test_size=0.2, prediction_days=30):
     df_feat['MA10'] = df_feat['Close'].rolling(window=10).mean()
     df_feat['MA20'] = df_feat['Close'].rolling(window=20).mean()
     df_feat['MA50'] = df_feat['Close'].rolling(window=50).mean()
-    df_feat['MA200'] = df_feat['Close'].rolling(window=200).mean()
     
     # Price relative to moving averages (normalized)
     df_feat['Price_Rel_MA5'] = df_feat['Close'] / df_feat['MA5'] - 1
@@ -79,8 +78,6 @@ def prepare_data_ml(data, lookback=60, test_size=0.2, prediction_days=30):
         df_feat['Volume_Change'] = df_feat['Volume'].pct_change()
         df_feat['Volume_MA10'] = df_feat['Volume'].rolling(window=10).mean()
         df_feat['Rel_Volume'] = df_feat['Volume'] / df_feat['Volume_MA10']
-        # Volume and price relationship
-        df_feat['Price_Volume_Corr'] = df_feat['Close'].rolling(10).corr(df_feat['Volume'])
     
     # Momentum and oscillator-inspired features
     df_feat['Price_Rate_Of_Change'] = df_feat['Close'].pct_change(10)
@@ -92,70 +89,44 @@ def prepare_data_ml(data, lookback=60, test_size=0.2, prediction_days=30):
     rs = gain / loss
     df_feat['RSI_Feature'] = 100 - (100 / (1 + rs))
     
-    # Bollinger band position (normalized)
+    # Bollinger band position
     std_20 = df_feat['Close'].rolling(window=20).std()
     df_feat['Bollinger_Position'] = (df_feat['Close'] - df_feat['MA20']) / (2 * std_20)
-    
-    # Trend features
-    df_feat['Trend_20d'] = np.where(df_feat['MA20'] > df_feat['MA20'].shift(5), 1, -1)
-    
-    # Lag features of close price
-    for i in range(1, 6):
-        df_feat[f'Close_Lag_{i}'] = df_feat['Close'].shift(i)
     
     # Drop NaN values
     df_feat.dropna(inplace=True)
     
-    # Define which features to use (exclude some to avoid multicollinearity)
+    # Define which features to use (select a smaller subset to reduce complexity)
     feature_columns = [
-        'Return_1d', 'Return_5d', 'Return_10d', 'Return_20d',
-        'Price_Rel_MA5', 'Price_Rel_MA20', 'Price_Rel_MA50',
-        'MA5_cross_MA20', 'MA20_cross_MA50',
-        'Volatility_10d', 'Volatility_20d',
-        'High_Low_Range', 'Avg_Range_5d',
-        'Price_Rate_Of_Change', 'RSI_Feature', 'Bollinger_Position', 'Trend_20d'
+        'Return_1d', 'Return_5d', 'Return_20d',
+        'Price_Rel_MA5', 'Price_Rel_MA20',
+        'MA5_cross_MA20',
+        'Volatility_20d',
+        'High_Low_Range',
+        'RSI_Feature', 
+        'Bollinger_Position'
     ]
     
     # Add volume features if available
-    if 'Volume' in df_feat.columns:
-        volume_features = ['Volume_Change', 'Rel_Volume', 'Price_Volume_Corr']
-        feature_columns.extend(volume_features)
+    if 'Volume' in df_feat.columns and 'Rel_Volume' in df_feat.columns:
+        feature_columns.append('Rel_Volume')
     
     # Scale the features
     scaler = MinMaxScaler(feature_range=(0, 1))
     features = df_feat[feature_columns].values
     scaled_features = scaler.fit_transform(features)
     
-    # Also create a price scaler for rescaling predictions
-    price_scaler = MinMaxScaler(feature_range=(0, 1))
-    price_scaler.fit(df_feat[['Close']].values)
+    # For simplicity, we'll use a simpler approach with direct feature-target pairs
+    # instead of sequences, which can be more stable for financial data
+    X = scaled_features
+    y = df_feat['Close'].values
     
-    # Create sequences for time series prediction
-    X = []
-    y = []
-    dates = []
-    
-    # Use lookback to create sequences (more appropriate for time series)
-    sequence_length = lookback
-    
-    for i in range(len(scaled_features) - sequence_length - prediction_days):
-        # Use a sequence of data as input
-        X.append(scaled_features[i:i+sequence_length])
-        # Use the close price n days in the future as target
-        target_idx = i + sequence_length + prediction_days - 1 
-        target = df_feat['Close'].iloc[target_idx]
-        y.append(target)
-        dates.append(df_feat.index[target_idx])
-    
-    X = np.array(X)
-    y = np.array(y)
-    
-    # Split data into train and test sets - use time-ordered split for time series
+    # Split data into train and test sets - use time-ordered split
     train_size = int(len(X) * (1 - test_size))
     X_train, X_test = X[:train_size], X[train_size:]
     y_train, y_test = y[:train_size], y[train_size:]
     
-    return X_train, X_test, y_train, y_test, scaler, price_scaler, df_feat, dates, feature_columns
+    return X_train, X_test, y_train, y_test, scaler, None, df_feat, None, feature_columns
 
 # Function to build and train ML model
 def build_ml_model(X_train, y_train):
@@ -387,18 +358,10 @@ if ticker_input:
                             st.plotly_chart(fig, use_container_width=True)
                         
                         # Make future predictions
-                        # Get the most recent data point as a starting point
-                        latest_data = df_feat.iloc[-1:][feature_columns].values
-                        
-                        # For each future day, predict the price and update the feature set
-                        future_prices_rf = []
-                        future_prices_svr = []
-                        
                         # Create future dates
                         last_date = hist.index[-1]
                         future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(prediction_days)]
                         
-                        # Simpler prediction approach using the last available data point
                         # Get the most recent data point
                         latest_data = df_feat.iloc[-1:][feature_columns].values
                         
