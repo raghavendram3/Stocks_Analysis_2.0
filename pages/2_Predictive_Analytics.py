@@ -380,30 +380,73 @@ if ticker_input:
                         future_prices_rf.append(rf_pred)
                         future_prices_svr.append(svr_pred)
                         
-                        # Make the rest of the predictions with a simple approach
-                        # For financial time series, this can actually be more robust than trying to
-                        # recursively update all features which can lead to compounding errors
+                        # Make the rest of the predictions using a more realistic market simulation approach
                         
-                        # Create a synthetic trend based on the most recent price movements
-                        # This is a simplified but practical approach for short-term forecasting
-                        recent_prices = hist['Close'].iloc[-30:].values
-                        price_diffs = np.diff(recent_prices)
-                        avg_price_change = np.mean(price_diffs)
-                        std_price_change = np.std(price_diffs)
+                        # Get recent history to model market behavior more accurately
+                        lookback_window = min(120, len(hist) - 1)  # Use 120 days or all available if less
+                        recent_prices = hist['Close'].iloc[-lookback_window:].values
                         
-                        # Generate future predictions with a slight randomness to model uncertainty
+                        # Calculate logarithmic returns which better captures proportional price changes
+                        log_returns = np.diff(np.log(recent_prices))
+                        
+                        # Calculate statistics from historical returns - more realistic for financial modeling
+                        mean_return = np.mean(log_returns)
+                        std_return = np.std(log_returns)
+                        
+                        # Use a mean-reversion and momentum model - more realistic for financial markets
+                        # Start with most recent prediction
                         current_rf_price = rf_pred
                         current_svr_price = svr_pred
                         
+                        # We'll simulate future price paths with more realistic market behavior
                         for i in range(1, prediction_days):
-                            # Calculate next price with some randomness (staying within reasonable bounds)
-                            # Random Forest tends to be more stable
-                            noise_rf = np.random.normal(0, std_price_change * 0.3) 
-                            noise_svr = np.random.normal(0, std_price_change * 0.3)
+                            # Get recent trend from previous 5 days or available predictions
+                            if i < 5:
+                                look_back = i
+                                past_real_prices = hist['Close'].iloc[-(5-i):].values
+                                if i > 0:
+                                    past_pred_prices_rf = future_prices_rf[-look_back:]
+                                    past_pred_prices_svr = future_prices_svr[-look_back:]
+                                    
+                                    # Combine real and predicted for trend calculation
+                                    trend_prices_rf = np.concatenate([past_real_prices, past_pred_prices_rf])
+                                    trend_prices_svr = np.concatenate([past_real_prices, past_pred_prices_svr])
+                                else:
+                                    trend_prices_rf = past_real_prices
+                                    trend_prices_svr = past_real_prices
+                            else:
+                                # Use only predicted values for longer forecasts
+                                trend_prices_rf = future_prices_rf[-5:]
+                                trend_prices_svr = future_prices_svr[-5:]
                             
-                            # Update predictions with trend and small noise
-                            next_rf_price = current_rf_price + avg_price_change + noise_rf
-                            next_svr_price = current_svr_price + avg_price_change + noise_svr
+                            # Calculate short-term trend factor
+                            rf_trend = (trend_prices_rf[-1] / trend_prices_rf[0] - 1) * 0.3  # 30% weight to trend
+                            svr_trend = (trend_prices_svr[-1] / trend_prices_svr[0] - 1) * 0.3
+                            
+                            # Apply mean reversion - prices tend to revert to means (basic market behavior)
+                            # Calculate the price gap from 20-day moving average
+                            if i < 10:
+                                ma20 = hist['Close'].iloc[-20:].mean()
+                            else:
+                                recent_ma = np.concatenate([hist['Close'].iloc[-10:].values, future_prices_rf[:i-1]])[-20:]
+                                ma20 = np.mean(recent_ma)
+                            
+                            # Mean reversion factor - stronger when far from moving average
+                            rf_reversion = (ma20 - current_rf_price) / current_rf_price * 0.1
+                            svr_reversion = (ma20 - current_svr_price) / current_svr_price * 0.1
+                            
+                            # Calculate random component (represents unpredictable market factors)
+                            # We use a realistic random walk with drift
+                            rf_random = np.random.normal(mean_return, std_return) * current_rf_price * 0.6
+                            svr_random = np.random.normal(mean_return, std_return) * current_svr_price * 0.6
+                            
+                            # Combine factors for next price: trend + mean reversion + random factor
+                            next_rf_price = current_rf_price * (1 + rf_trend + rf_reversion) + rf_random
+                            next_svr_price = current_svr_price * (1 + svr_trend + svr_reversion) + svr_random
+                            
+                            # Ensure prices don't go negative (market constraint)
+                            next_rf_price = max(next_rf_price, current_rf_price * 0.9)
+                            next_svr_price = max(next_svr_price, current_svr_price * 0.9)
                             
                             # Store predictions
                             future_prices_rf.append(next_rf_price)
