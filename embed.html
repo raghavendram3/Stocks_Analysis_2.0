@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockTrackPro Embed</title>
+    <style>
+        .streamlit-embed {
+            width: 100%;
+            height: 800px;
+            border: none;
+            overflow: hidden;
+        }
+        .streamlit-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 150%; /* Adjust this value to control the aspect ratio */
+        }
+        .responsive-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* Optional: Add these styles for a better mobile experience */
+        @media (max-width: 768px) {
+            .streamlit-container {
+                padding-bottom: 200%; /* Taller on mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="responsive-wrapper">
+        <div class="streamlit-container">
+            <!-- Replace YOUR_APP_URL with the actual deployed URL of your Streamlit app -->
+            <iframe 
+                src="YOUR_APP_URL" 
+                class="streamlit-embed" 
+                allowfullscreen
+                title="StockTrackPro"
+            ></iframe>
+        </div>
+    </div>
+
+    <!-- Instructions for website owner -->
+    <!--
+    HOW TO EMBED STOCKTRACKPRO ON YOUR WEBSITE:
+    
+    1. Replace YOUR_APP_URL with the actual deployed URL of your Streamlit app
+    2. Copy this entire <div> block into your website's HTML where you want the app to appear
+    3. Adjust the height and width in the CSS as needed to fit your website layout
+    4. Remove these instruction comments before publishing
+    
+    <div class="responsive-wrapper">
+        <div class="streamlit-container">
+            <iframe 
+                src="YOUR_APP_URL" 
+                class="streamlit-embed" 
+                allowfullscreen
+                title="StockTrackPro"
+            ></iframe>
+        </div>
+    </div>
+    -->
+</body>
+</html>
