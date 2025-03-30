@@ -17,10 +17,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "StreamlitServer"
+args = "StockAnalysisApp"
 
 [[workflows.workflow]]
-name = "StreamlitServer"
+name = "StockAnalysisApp"
 author = "agent"
 
 [workflows.workflow.metadata]
@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "streamlit run ./home.py --server.port 5000"
+args = "streamlit run home.py --server.port=5000 --server.address=0.0.0.0"
 waitForPort = 5000
 
 [[ports]]
