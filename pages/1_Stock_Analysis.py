@@ -210,19 +210,22 @@ def calculate_technical_indicators(df):
     # 9. Advanced Trend Indicators
     
     # ADX (Average Directional Index) - helps determine trend strength
-    adx = ADXIndicator(
-        high=df_ta["High"],
-        low=df_ta["Low"],
-        close=df_ta["Close"],
-        window=14
-    )
-    df_ta["adx"] = adx.adx()
-    df_ta["adx_pos"] = adx.adx_pos()  # +DI
-    df_ta["adx_neg"] = adx.adx_neg()  # -DI
+    # ADX needs at least 2 * window periods of data
+    if len(df_ta) >= 30:  # Minimum data needed for ADX with window=14
+        adx = ADXIndicator(
+            high=df_ta["High"],
+            low=df_ta["Low"],
+            close=df_ta["Close"],
+            window=14
+        )
+        df_ta["adx"] = adx.adx()
+        df_ta["adx_pos"] = adx.adx_pos()  # +DI
+        df_ta["adx_neg"] = adx.adx_neg()  # -DI
     
     # Aroon Indicator - helps identify when trends are likely to change
     aroon = AroonIndicator(
-        close=df_ta["Close"],
+        high=df_ta["High"],
+        low=df_ta["Low"],
         window=25
     )
     df_ta["aroon_up"] = aroon.aroon_up()
@@ -315,9 +318,9 @@ def calculate_technical_indicators(df):
     # TSI (True Strength Index)
     tsi = TSIIndicator(
         close=df_ta["Close"],
-        long=25,
-        short=13,
-        signal=13
+        window_slow=25,
+        window_fast=13,
+        window_signal=13
     )
     df_ta["tsi"] = tsi.tsi()
     
