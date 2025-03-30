@@ -122,6 +122,8 @@ def prepare_data_prophet(data):
     """Prepare stock data for Prophet model"""
     # Reset index to make date a column and rename columns
     df = data.reset_index()[['Date', 'Close']]
+    # Remove timezone information from dates to prevent Prophet errors
+    df['Date'] = df['Date'].dt.tz_localize(None)
     df.columns = ['ds', 'y']
     return df
 
