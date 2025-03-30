@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.analytics import inject_google_tag_manager
 
 # Configure page - MUST BE THE FIRST STREAMLIT COMMAND
 st.set_page_config(
@@ -6,6 +7,9 @@ st.set_page_config(
     page_icon="🔮",
     layout="wide"
 )
+
+# Inject Google Tag Manager
+inject_google_tag_manager()
 
 import yfinance as yf
 import pandas as pd

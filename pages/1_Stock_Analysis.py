@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.analytics import inject_google_tag_manager
 
 # Configure page - MUST BE THE FIRST STREAMLIT COMMAND
 st.set_page_config(
@@ -6,6 +7,9 @@ st.set_page_config(
     page_icon="📈",
     layout="wide"
 )
+
+# Inject Google Tag Manager
+inject_google_tag_manager()
 
 import yfinance as yf
 import pandas as pd
@@ -828,6 +832,18 @@ with st.sidebar:
     }
     selected_period = st.selectbox("Select Time Period", list(period_options.keys()))
     period = period_options[selected_period]
+    
+    # Search button with event tracking
+    search_button = st.button("Search Stock")
+    if search_button:
+        # Import for event tracking
+        from utils.analytics import track_event
+        # Track the stock search event with Google Tag Manager
+        track_event("stock_search", {
+            "ticker": ticker_input,
+            "period": period,
+            "page": "Stock Analysis"
+        })
     
     st.caption("Data provided by Yahoo Finance")
 
