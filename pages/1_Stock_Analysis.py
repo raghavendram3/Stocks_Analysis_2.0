@@ -10,31 +10,17 @@ st.set_page_config(
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.subplots as sp
 import numpy as np
 from datetime import datetime, timedelta
-# Technical analysis libraries - using only ta library, not pandas_ta
+# Technical analysis libraries
 from ta.trend import MACD, SMAIndicator, IchimokuIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
 from ta.volume import OnBalanceVolumeIndicator
 
 # Header and navigation
-with st.container():
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.title("📈 Stock Analysis")
-        st.markdown("Get comprehensive financial data, technical indicators, and investment insights")
-    
-    with col2:
-        st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
-        nav_col1, nav_col2, nav_col3 = st.columns(3)
-        with nav_col1:
-            st.page_link("home.py", label="Home", icon="🏠")
-        with nav_col2:
-            st.page_link("pages/1_Stock_Analysis.py", label="Stock Analysis", icon="📈")
-        with nav_col3:
-            st.page_link("pages/2_Predictive_Analytics.py", label="Predictions", icon="🔮")
+st.title("📈 Stock Analysis")
+st.markdown("Get comprehensive financial data, technical indicators, and investment insights")
 
 # Function to get stock data
 @st.cache_data
@@ -180,18 +166,27 @@ def analyze_technical_indicators(df_ta):
     latest = df_ta.iloc[-1]
     prev = df_ta.iloc[-2]
     
+    # Helper function to streamline indicator status checks
+    def get_indicator_status(name, condition_bullish, condition_bearish):
+        if condition_bullish:
+            return f"🔵 {name}: Bullish signal"
+        elif condition_bearish:
+            return f"🔴 {name}: Bearish signal"
+        return None
+    
     # 1. MACD Analysis
     if "macd" in df_ta.columns and "macd_signal" in df_ta.columns:
         # MACD Crossover (MACD line crosses above signal line)
-        if prev["macd"] < prev["macd_signal"] and latest["macd"] > latest["macd_signal"]:
-            signals.append("🔵 MACD: Bullish signal - MACD line crossed above signal line, indicating potential upward momentum.")
+        bullish = prev["macd"] < prev["macd_signal"] and latest["macd"] > latest["macd_signal"]
         # MACD Crossunder (MACD line crosses below signal line)
-        elif prev["macd"] > prev["macd_signal"] and latest["macd"] < latest["macd_signal"]:
-            signals.append("🔴 MACD: Bearish signal - MACD line crossed below signal line, indicating potential downward momentum.")
-        # MACD above zero
+        bearish = prev["macd"] > prev["macd_signal"] and latest["macd"] < latest["macd_signal"]
+        
+        status = get_indicator_status("MACD", bullish, bearish)
+        if status:
+            signals.append(status)
+        # MACD above/below zero
         elif latest["macd"] > 0 and latest["macd_signal"] > 0:
             signals.append("🔵 MACD: Both MACD and signal lines are above zero, suggesting a strong bullish trend.")
-        # MACD below zero
         elif latest["macd"] < 0 and latest["macd_signal"] < 0:
             signals.append("🔴 MACD: Both MACD and signal lines are below zero, suggesting a strong bearish trend.")
     
@@ -223,18 +218,21 @@ def analyze_technical_indicators(df_ta):
                 signals.append("🔔 Bollinger Bands: Bands narrowing - suggests a potential breakout or increased volatility soon.")
     
     # 4. Moving Average Analysis
-    if "sma_50" in df_ta.columns and "sma_200" in df_ta.columns and not pd.isna(latest["sma_50"]) and not pd.isna(latest["sma_200"]):
-        # Golden Cross (50 MA crosses above 200 MA)
-        if prev["sma_50"] <= prev["sma_200"] and latest["sma_50"] > latest["sma_200"]:
-            signals.append("🔵 Golden Cross: 50-day MA crossed above 200-day MA - widely regarded as a bullish signal.")
-        # Death Cross (50 MA crosses below 200 MA)
-        elif prev["sma_50"] >= prev["sma_200"] and latest["sma_50"] < latest["sma_200"]:
-            signals.append("🔴 Death Cross: 50-day MA crossed below 200-day MA - widely regarded as a bearish signal.")
-        # Price above/below both MAs
-        elif latest["Close"] > latest["sma_50"] and latest["Close"] > latest["sma_200"]:
-            signals.append("🔵 Moving Averages: Price above both 50-day and 200-day MAs - indicates a strong bullish trend.")
-        elif latest["Close"] < latest["sma_50"] and latest["Close"] < latest["sma_200"]:
-            signals.append("🔴 Moving Averages: Price below both 50-day and 200-day MAs - indicates a strong bearish trend.")
+    if "sma_50" in df_ta.columns and "sma_200" in df_ta.columns:
+        if not pd.isna(latest["sma_50"]) and not pd.isna(latest["sma_200"]):
+            # Golden Cross (50 MA crosses above 200 MA)
+            bullish = prev["sma_50"] <= prev["sma_200"] and latest["sma_50"] > latest["sma_200"]
+            # Death Cross (50 MA crosses below 200 MA)
+            bearish = prev["sma_50"] >= prev["sma_200"] and latest["sma_50"] < latest["sma_200"]
+            
+            status = get_indicator_status("Moving Averages", bullish, bearish)
+            if status:
+                signals.append(status + (" - Golden Cross detected" if bullish else " - Death Cross detected"))
+            # Price above/below both MAs
+            elif latest["Close"] > latest["sma_50"] and latest["Close"] > latest["sma_200"]:
+                signals.append("🔵 Moving Averages: Price above both 50-day and 200-day MAs - indicates a strong bullish trend.")
+            elif latest["Close"] < latest["sma_50"] and latest["Close"] < latest["sma_200"]:
+                signals.append("🔴 Moving Averages: Price below both 50-day and 200-day MAs - indicates a strong bearish trend.")
     
     # 5. Stochastic Oscillator Analysis
     if "stoch" in df_ta.columns and "stoch_signal" in df_ta.columns:
@@ -244,30 +242,32 @@ def analyze_technical_indicators(df_ta):
             signals.append("🔍 Stochastic Oscillator: Below 20 - indicates oversold conditions.")
         
         # Stochastic Crossover
-        if prev["stoch"] < prev["stoch_signal"] and latest["stoch"] > latest["stoch_signal"]:
-            signals.append("🔵 Stochastic Oscillator: Bullish crossover - %K line crossed above %D line.")
-        elif prev["stoch"] > prev["stoch_signal"] and latest["stoch"] < latest["stoch_signal"]:
-            signals.append("🔴 Stochastic Oscillator: Bearish crossover - %K line crossed below %D line.")
+        bullish = prev["stoch"] < prev["stoch_signal"] and latest["stoch"] > latest["stoch_signal"]
+        bearish = prev["stoch"] > prev["stoch_signal"] and latest["stoch"] < latest["stoch_signal"]
+        
+        status = get_indicator_status("Stochastic Oscillator", bullish, bearish)
+        if status:
+            signals.append(status + (" - %K line crossed above %D line" if bullish else " - %K line crossed below %D line"))
     
     # 6. OBV (On-Balance Volume) Analysis
-    if "obv" in df_ta.columns:
+    if "obv" in df_ta.columns and len(df_ta) >= 10:
         # Calculate OBV trend over past 10 days
-        if len(df_ta) >= 10:
-            recent_obv = df_ta["obv"].iloc[-10:].values
-            obv_trend = np.polyfit(range(len(recent_obv)), recent_obv, 1)[0]
-            price_trend = np.polyfit(range(10), df_ta["Close"].iloc[-10:].values, 1)[0]
-            
-            if obv_trend > 0 and price_trend > 0:
-                signals.append("🔵 OBV: Rising OBV confirms uptrend - volume supports price movement.")
-            elif obv_trend < 0 and price_trend < 0:
-                signals.append("🔴 OBV: Falling OBV confirms downtrend - volume supports price movement.")
-            elif obv_trend > 0 and price_trend < 0:
-                signals.append("⚠️ OBV: OBV rising while price falling - potential bullish divergence.")
-            elif obv_trend < 0 and price_trend > 0:
-                signals.append("⚠️ OBV: OBV falling while price rising - potential bearish divergence.")
+        recent_obv = df_ta["obv"].iloc[-10:].values
+        obv_trend = np.polyfit(range(len(recent_obv)), recent_obv, 1)[0]
+        price_trend = np.polyfit(range(10), df_ta["Close"].iloc[-10:].values, 1)[0]
+        
+        if obv_trend > 0 and price_trend > 0:
+            signals.append("🔵 OBV: Rising OBV confirms uptrend - volume supports price movement.")
+        elif obv_trend < 0 and price_trend < 0:
+            signals.append("🔴 OBV: Falling OBV confirms downtrend - volume supports price movement.")
+        elif obv_trend > 0 and price_trend < 0:
+            signals.append("⚠️ OBV: OBV rising while price falling - potential bullish divergence.")
+        elif obv_trend < 0 and price_trend > 0:
+            signals.append("⚠️ OBV: OBV falling while price rising - potential bearish divergence.")
     
     # 7. Ichimoku Cloud Analysis
-    if all(x in df_ta.columns for x in ["ichimoku_a", "ichimoku_b", "ichimoku_base", "ichimoku_conversion"]):
+    cloud_cols = ["ichimoku_a", "ichimoku_b", "ichimoku_base", "ichimoku_conversion"]
+    if all(x in df_ta.columns for x in cloud_cols):
         if not pd.isna(latest["ichimoku_a"]) and not pd.isna(latest["ichimoku_b"]):
             close = latest["Close"]
             senkou_a = latest["ichimoku_a"]
@@ -284,10 +284,12 @@ def analyze_technical_indicators(df_ta):
                 signals.append("➡️ Ichimoku Cloud: Price inside the cloud - indicates consolidation or indecision.")
             
             # Tenkan-sen / Kijun-sen cross
-            if prev["ichimoku_conversion"] < prev["ichimoku_base"] and conversion > base:
-                signals.append("🔵 Ichimoku Cloud: Conversion line crossed above base line - bullish signal.")
-            elif prev["ichimoku_conversion"] > prev["ichimoku_base"] and conversion < base:
-                signals.append("🔴 Ichimoku Cloud: Conversion line crossed below base line - bearish signal.")
+            bullish = prev["ichimoku_conversion"] < prev["ichimoku_base"] and conversion > base
+            bearish = prev["ichimoku_conversion"] > prev["ichimoku_base"] and conversion < base
+            
+            status = get_indicator_status("Ichimoku Cloud", bullish, bearish)
+            if status:
+                signals.append(status + (" - Conversion line crossed above base line" if bullish else " - Conversion line crossed below base line"))
     
     # 8. Fibonacci Retracement Analysis
     if "fib_61.8" in df_ta.columns:
@@ -404,26 +406,6 @@ with st.sidebar:
     selected_period = st.selectbox("Select Time Period", list(period_options.keys()))
     period = period_options[selected_period]
     
-    # Technical Analysis settings
-    st.header("Technical Analysis")
-    st.write("Analyze the stock using various technical indicators:")
-    
-    with st.expander("About Technical Indicators"):
-        st.markdown("""
-        **Technical indicators** are mathematical calculations based on price, volume, or open interest of a security. They help traders identify trading opportunities and analyze market conditions.
-        
-        This app includes 7 powerful technical indicators, based on [Investopedia's top technical analysis tools](https://www.investopedia.com/top-7-technical-analysis-tools-4773275):
-        
-        1. **MACD** - Trend following momentum indicator
-        2. **RSI** - Momentum oscillator measuring speed and change of price movements
-        3. **Bollinger Bands** - Volatility bands placed above and below a moving average
-        4. **Moving Averages** - Smoothed average price data with Golden/Death Cross signals
-        5. **Stochastic Oscillator** - Momentum indicator comparing closing price to price range
-        6. **On-Balance Volume** - Volume indicator that relates volume to price change
-        7. **Ichimoku Cloud** - Collection of indicators showing support, resistance and trend
-        8. **Fibonacci Retracement** - Price levels indicating potential support/resistance
-        """)
-    
     st.caption("Data provided by Yahoo Finance")
 
 # Main content
@@ -528,6 +510,106 @@ if ticker_input:
             
             st.plotly_chart(fig, use_container_width=True)
             
+            # Technical Analysis section
+            st.subheader("Technical Analysis")
+            
+            # Calculate technical indicators
+            with st.spinner("Calculating technical indicators..."):
+                df_ta = calculate_technical_indicators(hist)
+                
+            # Create technical analysis tabs
+            tech_tab1, tech_tab2, tech_tab3 = st.tabs(["Signals", "Indicators", "Charts"])
+            
+            with tech_tab1:
+                # Technical analysis signals
+                st.subheader("Technical Signals")
+                
+                signals = analyze_technical_indicators(df_ta)
+                
+                for signal in signals:
+                    st.markdown(f"- {signal}")
+            
+            with tech_tab2:
+                # Show main technical indicators
+                st.subheader("Key Technical Indicators")
+                
+                indicators_df = pd.DataFrame({
+                    'Date': df_ta.index,
+                    'Close': df_ta['Close'],
+                    'RSI (14)': df_ta['rsi'].round(2),
+                    'MACD': df_ta['macd'].round(2),
+                    'MACD Signal': df_ta['macd_signal'].round(2),
+                    'Stochastic %K': df_ta['stoch'].round(2),
+                    'Bollinger Upper': df_ta['bollinger_hband'].round(2),
+                    'Bollinger Lower': df_ta['bollinger_lband'].round(2),
+                    'SMA 50': df_ta['sma_50'].round(2),
+                    'SMA 200': df_ta['sma_200'].round(2),
+                }).reset_index(drop=True)
+                
+                st.dataframe(indicators_df.tail(10), use_container_width=True)
+                
+                # Download button for indicator data
+                st.download_button(
+                    label="Download Technical Indicators as CSV",
+                    data=indicators_df.to_csv(index=False).encode('utf-8'),
+                    file_name=f"{ticker_input}_technical_indicators.csv",
+                    mime="text/csv"
+                )
+            
+            with tech_tab3:
+                # Display technical indicator charts
+                chart_option = st.selectbox(
+                    "Select Technical Indicator to Display",
+                    ["RSI", "MACD", "Bollinger Bands", "Moving Averages", "Stochastic Oscillator"]
+                )
+                
+                if chart_option == "RSI":
+                    # RSI Chart
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['rsi'], name="RSI"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=[70] * len(df_ta), name="Overbought (70)", line=dict(color='red', dash='dash')))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=[30] * len(df_ta), name="Oversold (30)", line=dict(color='green', dash='dash')))
+                    fig.update_layout(title="Relative Strength Index (RSI)", height=400, yaxis_title="RSI Value")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                elif chart_option == "MACD":
+                    # MACD Chart
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['macd'], name="MACD"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['macd_signal'], name="Signal Line"))
+                    fig.add_trace(go.Bar(x=df_ta.index, y=df_ta['macd_histogram'], name="Histogram"))
+                    fig.update_layout(title="MACD", height=400, yaxis_title="Value")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                elif chart_option == "Bollinger Bands":
+                    # Bollinger Bands Chart
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['Close'], name="Close Price"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['bollinger_hband'], name="Upper Band", line=dict(dash='dash')))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['bollinger_mavg'], name="MA (20)"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['bollinger_lband'], name="Lower Band", line=dict(dash='dash')))
+                    fig.update_layout(title="Bollinger Bands", height=400, yaxis_title="Price")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                elif chart_option == "Moving Averages":
+                    # Moving Averages Chart
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['Close'], name="Close Price"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['sma_50'], name="SMA 50"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['sma_200'], name="SMA 200"))
+                    fig.update_layout(title="Moving Averages", height=400, yaxis_title="Price")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                elif chart_option == "Stochastic Oscillator":
+                    # Stochastic Oscillator Chart
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['stoch'], name="%K"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=df_ta['stoch_signal'], name="%D"))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=[80] * len(df_ta), name="Overbought (80)", line=dict(color='red', dash='dash')))
+                    fig.add_trace(go.Scatter(x=df_ta.index, y=[20] * len(df_ta), name="Oversold (20)", line=dict(color='green', dash='dash')))
+                    fig.update_layout(title="Stochastic Oscillator", height=400, yaxis_title="Value")
+                    st.plotly_chart(fig, use_container_width=True)
+            
             # Financial ratios in table
             st.subheader("Key Financial Metrics")
             
@@ -579,824 +661,8 @@ if ticker_input:
                 mime="text/csv"
             )
             
-            # Technical Analysis Section
-            st.subheader("Technical Analysis")
-            
-            # Calculate all technical indicators
-            with st.spinner("Calculating technical indicators..."):
-                df_ta = calculate_technical_indicators(hist)
-                
-            # Tab sections for different technical indicators
-            tabs = st.tabs(["Overview", "MACD", "RSI", "Bollinger Bands", "Moving Averages", "Stochastic", "OBV", "Ichimoku Cloud", "Fibonacci"])
-            
-            with tabs[0]:  # Overview Tab
-                # Technical analysis signals
-                st.subheader("Technical Signals")
-                signals = analyze_technical_indicators(df_ta)
-                for signal in signals:
-                    st.markdown(f"- {signal}")
-                
-                # Summary of indicators with colored status
-                st.subheader("Indicators Overview")
-                
-                # Create indicator status grid
-                col1, col2, col3 = st.columns(3)
-                
-                # Function to get indicator status and color
-                def get_indicator_status(name, condition_bullish, condition_bearish):
-                    if condition_bullish:
-                        return f"**{name}**: 🟢 Bullish"
-                    elif condition_bearish:
-                        return f"**{name}**: 🔴 Bearish"
-                    else:
-                        return f"**{name}**: 🟡 Neutral"
-                
-                latest = df_ta.iloc[-1]
-                
-                # MACD Status
-                if "macd" in df_ta.columns and "macd_signal" in df_ta.columns:
-                    macd_bullish = latest["macd"] > latest["macd_signal"]
-                    macd_bearish = latest["macd"] < latest["macd_signal"]
-                    col1.markdown(get_indicator_status("MACD", macd_bullish, macd_bearish))
-                
-                # RSI Status
-                if "rsi" in df_ta.columns:
-                    rsi_bullish = 40 <= latest["rsi"] <= 60 or latest["rsi"] < 30
-                    rsi_bearish = latest["rsi"] > 70
-                    col1.markdown(get_indicator_status("RSI", rsi_bullish, rsi_bearish))
-                
-                # Bollinger Bands Status
-                if all(x in df_ta.columns for x in ["bollinger_hband", "bollinger_lband"]):
-                    bb_bullish = latest["Close"] <= latest["bollinger_lband"] * 1.02
-                    bb_bearish = latest["Close"] >= latest["bollinger_hband"] * 0.98
-                    col1.markdown(get_indicator_status("Bollinger Bands", bb_bullish, bb_bearish))
-                
-                # Moving Averages Status
-                if "sma_50" in df_ta.columns and "sma_200" in df_ta.columns:
-                    ma_bullish = latest["Close"] > latest["sma_50"] and latest["sma_50"] > latest["sma_200"]
-                    ma_bearish = latest["Close"] < latest["sma_50"] and latest["sma_50"] < latest["sma_200"]
-                    col2.markdown(get_indicator_status("Moving Averages", ma_bullish, ma_bearish))
-                
-                # Stochastic Status
-                if "stoch" in df_ta.columns and "stoch_signal" in df_ta.columns:
-                    stoch_bullish = latest["stoch"] < 20 or (latest["stoch"] > latest["stoch_signal"] and latest["stoch"] < 80)
-                    stoch_bearish = latest["stoch"] > 80 or (latest["stoch"] < latest["stoch_signal"] and latest["stoch"] > 20)
-                    col2.markdown(get_indicator_status("Stochastic", stoch_bullish, stoch_bearish))
-                
-                # OBV Status
-                if "obv" in df_ta.columns and len(df_ta) >= 10:
-                    recent_obv = df_ta["obv"].iloc[-10:].values
-                    recent_close = df_ta["Close"].iloc[-10:].values
-                    obv_trend = np.polyfit(range(len(recent_obv)), recent_obv, 1)[0]
-                    price_trend = np.polyfit(range(len(recent_close)), recent_close, 1)[0]
-                    obv_bullish = obv_trend > 0
-                    obv_bearish = obv_trend < 0
-                    col2.markdown(get_indicator_status("OBV", obv_bullish, obv_bearish))
-                
-                # Ichimoku Status
-                if all(x in df_ta.columns for x in ["ichimoku_a", "ichimoku_b"]):
-                    if not pd.isna(latest["ichimoku_a"]) and not pd.isna(latest["ichimoku_b"]):
-                        cloud_bullish = latest["Close"] > max(latest["ichimoku_a"], latest["ichimoku_b"])
-                        cloud_bearish = latest["Close"] < min(latest["ichimoku_a"], latest["ichimoku_b"])
-                        col3.markdown(get_indicator_status("Ichimoku Cloud", cloud_bullish, cloud_bearish))
-                
-                # Fibonacci Status - just show nearest level
-                if "fib_61.8" in df_ta.columns:
-                    fib_levels = {
-                        "0%": latest["fib_0"],
-                        "23.6%": latest["fib_23.6"],
-                        "38.2%": latest["fib_38.2"],
-                        "50%": latest["fib_50"],
-                        "61.8%": latest["fib_61.8"],
-                        "100%": latest["fib_100"]
-                    }
-                    closest_fib = min(fib_levels.items(), key=lambda x: abs(x[1] - latest["Close"]))
-                    col3.markdown(f"**Fibonacci**: Nearest level {closest_fib[0]} (${closest_fib[1]:.2f})")
-            
-            # MACD Tab
-            with tabs[1]:
-                st.subheader("Moving Average Convergence Divergence (MACD)")
-                st.write("""
-                MACD is a trend-following momentum indicator that shows the relationship between two moving averages of a security's price.
-                - **MACD Line**: Difference between 12-period and 26-period EMAs
-                - **Signal Line**: 9-period EMA of the MACD Line
-                - **Histogram**: Difference between MACD Line and Signal Line
-                """)
-                
-                # Create MACD Chart
-                if "macd" in df_ta.columns:
-                    fig_macd = sp.make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                               vertical_spacing=0.1, row_heights=[0.7, 0.3])
-                    
-                    # Add price to top subplot
-                    fig_macd.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ), row=1, col=1)
-                    
-                    # Add MACD to bottom subplot
-                    fig_macd.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['macd'],
-                        name="MACD",
-                        line=dict(color='blue', width=2)
-                    ), row=2, col=1)
-                    
-                    fig_macd.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['macd_signal'],
-                        name="Signal",
-                        line=dict(color='red', width=1)
-                    ), row=2, col=1)
-                    
-                    # Add histogram as bar chart
-                    colors = ['green' if val >= 0 else 'red' for val in df_ta['macd_histogram']]
-                    fig_macd.add_trace(go.Bar(
-                        x=df_ta.index,
-                        y=df_ta['macd_histogram'],
-                        name="Histogram",
-                        marker_color=colors
-                    ), row=2, col=1)
-                    
-                    # Update layout
-                    fig_macd.update_layout(
-                        title=f"{ticker_input} Price and MACD",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_macd, use_container_width=True)
-                    
-                    # MACD Interpretation
-                    latest_macd = df_ta['macd'].iloc[-1]
-                    latest_signal = df_ta['macd_signal'].iloc[-1]
-                    
-                    st.subheader("Current MACD Status")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("MACD Line", f"{latest_macd:.3f}")
-                    col2.metric("Signal Line", f"{latest_signal:.3f}")
-                    col3.metric("Histogram", f"{latest_macd - latest_signal:.3f}")
-                    
-                    # MACD Interpretation
-                    if latest_macd > latest_signal:
-                        st.success("🔵 Bullish Signal: MACD is above the signal line, indicating upward momentum")
-                    else:
-                        st.error("🔴 Bearish Signal: MACD is below the signal line, indicating downward momentum")
-                else:
-                    st.warning("Insufficient data to calculate MACD")
-                
-            # RSI Tab
-            with tabs[2]:
-                st.subheader("Relative Strength Index (RSI)")
-                st.write("""
-                RSI measures the speed and magnitude of a security's price movements to evaluate overvalued or undervalued conditions.
-                - **RSI > 70**: Typically indicates overbought conditions (potential sell signal)
-                - **RSI < 30**: Typically indicates oversold conditions (potential buy signal)
-                - **RSI 40-60**: Indicates neutral market conditions
-                """)
-                
-                if "rsi" in df_ta.columns:
-                    # Create RSI Chart
-                    fig_rsi = sp.make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                              vertical_spacing=0.1, row_heights=[0.7, 0.3])
-                    
-                    # Add price to top subplot
-                    fig_rsi.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ), row=1, col=1)
-                    
-                    # Add RSI to bottom subplot
-                    fig_rsi.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['rsi'],
-                        name="RSI",
-                        line=dict(color='purple', width=2)
-                    ), row=2, col=1)
-                    
-                    # Add reference lines at 30 and 70
-                    fig_rsi.add_hline(y=30, line_width=1, line_dash="dash", line_color="green", row=2, col=1)
-                    fig_rsi.add_hline(y=70, line_width=1, line_dash="dash", line_color="red", row=2, col=1)
-                    
-                    # Update layout
-                    fig_rsi.update_layout(
-                        title=f"{ticker_input} Price and RSI",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_rsi, use_container_width=True)
-                    
-                    # RSI Status
-                    latest_rsi = df_ta['rsi'].iloc[-1]
-                    st.subheader("Current RSI Status")
-                    
-                    # Display the current RSI value with color indicating its state
-                    if latest_rsi > 70:
-                        st.error(f"⚠️ Overbought - RSI: {latest_rsi:.2f}")
-                    elif latest_rsi < 30:
-                        st.success(f"🔍 Oversold - RSI: {latest_rsi:.2f}")
-                    else:
-                        st.info(f"➡️ Neutral - RSI: {latest_rsi:.2f}")
-                else:
-                    st.warning("Insufficient data to calculate RSI")
-                    
-            # Bollinger Bands Tab
-            with tabs[3]:
-                st.subheader("Bollinger Bands")
-                st.write("""
-                Bollinger Bands consist of three lines:
-                - **Middle Band**: 20-period simple moving average (SMA)
-                - **Upper Band**: 20-period SMA + (2 × 20-period standard deviation)
-                - **Lower Band**: 20-period SMA - (2 × 20-period standard deviation)
-                
-                The bands expand and contract based on volatility. Prices reaching the bands can indicate:
-                - Price reaching upper band may suggest overbought conditions
-                - Price reaching lower band may suggest oversold conditions
-                - Narrow bands indicate low volatility, often preceding significant price movements
-                """)
-                
-                if "bollinger_mavg" in df_ta.columns:
-                    # Create Bollinger Bands Chart
-                    fig_bb = go.Figure()
-                    
-                    # Add price as candlestick
-                    fig_bb.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ))
-                    
-                    # Add Bollinger Bands
-                    fig_bb.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['bollinger_mavg'],
-                        name="Middle Band (SMA 20)",
-                        line=dict(color='blue', width=1)
-                    ))
-                    
-                    fig_bb.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['bollinger_hband'],
-                        name="Upper Band",
-                        line=dict(color='green', width=1)
-                    ))
-                    
-                    fig_bb.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['bollinger_lband'],
-                        name="Lower Band",
-                        line=dict(color='red', width=1)
-                    ))
-                    
-                    # Update layout
-                    fig_bb.update_layout(
-                        title=f"{ticker_input} with Bollinger Bands",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_bb, use_container_width=True)
-                    
-                    # Bollinger Bands Status
-                    latest_close = df_ta['Close'].iloc[-1]
-                    latest_upper = df_ta['bollinger_hband'].iloc[-1]
-                    latest_middle = df_ta['bollinger_mavg'].iloc[-1]
-                    latest_lower = df_ta['bollinger_lband'].iloc[-1]
-                    
-                    # Calculate band width as percentage
-                    band_width = ((latest_upper - latest_lower) / latest_middle) * 100
-                    
-                    # Current status
-                    st.subheader("Current Bollinger Bands Status")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Upper Band", f"${latest_upper:.2f}")
-                    col2.metric("Middle Band", f"${latest_middle:.2f}")
-                    col3.metric("Lower Band", f"${latest_lower:.2f}")
-                    
-                    st.metric("Bollinger Band Width", f"{band_width:.2f}%")
-                    
-                    # Position relative to bands
-                    if latest_close >= latest_upper * 0.98:
-                        st.error("⚠️ Price is near or above upper band - potential overbought condition")
-                    elif latest_close <= latest_lower * 1.02:
-                        st.success("🔍 Price is near or below lower band - potential oversold condition")
-                    else:
-                        position = (latest_close - latest_lower) / (latest_upper - latest_lower) * 100
-                        st.info(f"➡️ Price is {position:.1f}% of the way between lower and upper bands")
-                    
-                    # Band width interpretation
-                    if band_width < 10:
-                        st.warning("🔔 Bollinger Bands are narrow - this often precedes a significant price move")
-                else:
-                    st.warning("Insufficient data to calculate Bollinger Bands")
-                
-            # Moving Averages Tab
-            with tabs[4]:
-                st.subheader("Moving Averages & Golden/Death Cross")
-                st.write("""
-                Moving averages smooth price data to form a trend-following indicator:
-                - **50-day MA**: Short-term trend indicator 
-                - **200-day MA**: Long-term trend indicator
-                
-                Key signals:
-                - **Golden Cross**: 50-day MA crosses above 200-day MA (bullish)
-                - **Death Cross**: 50-day MA crosses below 200-day MA (bearish)
-                - Price above both MAs suggests bullish momentum
-                - Price below both MAs suggests bearish momentum
-                """)
-                
-                if "sma_50" in df_ta.columns and "sma_200" in df_ta.columns:
-                    # Create Moving Averages Chart
-                    fig_ma = go.Figure()
-                    
-                    # Add price
-                    fig_ma.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['Close'],
-                        name="Price",
-                        line=dict(color='black', width=1)
-                    ))
-                    
-                    # Add Moving Averages
-                    fig_ma.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['sma_50'],
-                        name="50-day MA",
-                        line=dict(color='blue', width=2)
-                    ))
-                    
-                    fig_ma.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['sma_200'],
-                        name="200-day MA",
-                        line=dict(color='red', width=2)
-                    ))
-                    
-                    # Update layout
-                    fig_ma.update_layout(
-                        title=f"{ticker_input} with 50-day and 200-day Moving Averages",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_ma, use_container_width=True)
-                    
-                    # Moving Averages Status
-                    latest_close = df_ta['Close'].iloc[-1]
-                    latest_sma50 = df_ta['sma_50'].iloc[-1]
-                    latest_sma200 = df_ta['sma_200'].iloc[-1]
-                    
-                    # Golden/Death Cross detection
-                    prev_diff = df_ta['sma_50'].iloc[-2] - df_ta['sma_200'].iloc[-2]
-                    curr_diff = latest_sma50 - latest_sma200
-                    
-                    st.subheader("Current Moving Averages Status")
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Current Price", f"${latest_close:.2f}")
-                    col2.metric("50-day MA", f"${latest_sma50:.2f}")
-                    col3.metric("200-day MA", f"${latest_sma200:.2f}")
-                    
-                    # Check for Golden/Death Cross
-                    if prev_diff <= 0 and curr_diff > 0:
-                        st.success("🔵 Golden Cross detected! 50-day MA crossed above 200-day MA (bullish signal)")
-                    elif prev_diff >= 0 and curr_diff < 0:
-                        st.error("🔴 Death Cross detected! 50-day MA crossed below 200-day MA (bearish signal)")
-                    
-                    # Price position relative to MAs
-                    if latest_close > latest_sma50 and latest_close > latest_sma200:
-                        st.success("🔵 Price is above both 50-day and 200-day MAs - bullish trend")
-                    elif latest_close < latest_sma50 and latest_close < latest_sma200:
-                        st.error("🔴 Price is below both 50-day and 200-day MAs - bearish trend")
-                    elif latest_close > latest_sma50 and latest_close < latest_sma200:
-                        st.info("➡️ Price is above 50-day MA but below 200-day MA - potential bullish momentum building")
-                    elif latest_close < latest_sma50 and latest_close > latest_sma200:
-                        st.warning("⚠️ Price is below 50-day MA but above 200-day MA - potential short-term weakness in bullish trend")
-                    
-                    # MA relationship
-                    if latest_sma50 > latest_sma200:
-                        st.success("🔵 50-day MA is above 200-day MA - long-term uptrend")
-                    else:
-                        st.error("🔴 50-day MA is below 200-day MA - long-term downtrend")
-                else:
-                    st.warning("Insufficient data to calculate Moving Averages")
-            
-            # Stochastic Oscillator Tab
-            with tabs[5]:
-                st.subheader("Stochastic Oscillator")
-                st.write("""
-                The Stochastic Oscillator compares a security's closing price to its price range over a specific period.
-                - **%K Line**: The current value of the stochastic indicator
-                - **%D Line**: 3-period moving average of %K
-                - **> 80**: Generally indicates overbought conditions
-                - **< 20**: Generally indicates oversold conditions
-                - Crossovers between %K and %D lines can signal trading opportunities
-                """)
-                
-                if "stoch" in df_ta.columns and "stoch_signal" in df_ta.columns:
-                    # Create Stochastic Oscillator Chart
-                    fig_stoch = sp.make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                                vertical_spacing=0.1, row_heights=[0.7, 0.3])
-                    
-                    # Add price to top subplot
-                    fig_stoch.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ), row=1, col=1)
-                    
-                    # Add Stochastic to bottom subplot
-                    fig_stoch.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['stoch'],
-                        name="%K Line",
-                        line=dict(color='blue', width=2)
-                    ), row=2, col=1)
-                    
-                    fig_stoch.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['stoch_signal'],
-                        name="%D Line",
-                        line=dict(color='red', width=1)
-                    ), row=2, col=1)
-                    
-                    # Add reference lines at 20 and 80
-                    fig_stoch.add_hline(y=20, line_width=1, line_dash="dash", line_color="green", row=2, col=1)
-                    fig_stoch.add_hline(y=80, line_width=1, line_dash="dash", line_color="red", row=2, col=1)
-                    
-                    # Update layout
-                    fig_stoch.update_layout(
-                        title=f"{ticker_input} Price and Stochastic Oscillator",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_stoch, use_container_width=True)
-                    
-                    # Stochastic Status
-                    latest_k = df_ta['stoch'].iloc[-1]
-                    latest_d = df_ta['stoch_signal'].iloc[-1]
-                    
-                    st.subheader("Current Stochastic Oscillator Status")
-                    col1, col2 = st.columns(2)
-                    col1.metric("%K Line", f"{latest_k:.2f}")
-                    col2.metric("%D Line", f"{latest_d:.2f}")
-                    
-                    # Interpretation
-                    if latest_k > 80:
-                        st.error("⚠️ Overbought - Stochastic %K > 80")
-                    elif latest_k < 20:
-                        st.success("🔍 Oversold - Stochastic %K < 20")
-                    else:
-                        st.info("➡️ Neutral zone - Stochastic %K between 20-80")
-                    
-                    # Crossover detection
-                    prev_k = df_ta['stoch'].iloc[-2]
-                    prev_d = df_ta['stoch_signal'].iloc[-2]
-                    
-                    if prev_k < prev_d and latest_k > latest_d:
-                        st.success("🔵 Bullish crossover - %K line crossed above %D line")
-                    elif prev_k > prev_d and latest_k < latest_d:
-                        st.error("🔴 Bearish crossover - %K line crossed below %D line")
-                else:
-                    st.warning("Insufficient data to calculate Stochastic Oscillator")
-            
-            # OBV Tab
-            with tabs[6]:
-                st.subheader("On-Balance Volume (OBV)")
-                st.write("""
-                On-Balance Volume is a momentum indicator that uses volume flow to predict changes in stock price.
-                
-                When OBV moves with price:
-                - Upward OBV trend with rising price confirms uptrend
-                - Downward OBV trend with falling price confirms downtrend
-                
-                When OBV diverges from price:
-                - OBV rises while price falls suggests potential bullish reversal
-                - OBV falls while price rises suggests potential bearish reversal
-                """)
-                
-                if "obv" in df_ta.columns:
-                    # Create OBV Chart
-                    fig_obv = sp.make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                              vertical_spacing=0.1, row_heights=[0.7, 0.3])
-                    
-                    # Add price to top subplot
-                    fig_obv.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['Close'],
-                        name="Price",
-                        line=dict(color='black', width=1)
-                    ), row=1, col=1)
-                    
-                    # Add OBV to bottom subplot
-                    fig_obv.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['obv'],
-                        name="OBV",
-                        line=dict(color='purple', width=2)
-                    ), row=2, col=1)
-                    
-                    # Update layout
-                    fig_obv.update_layout(
-                        title=f"{ticker_input} Price and On-Balance Volume",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_obv, use_container_width=True)
-                    
-                    # OBV Analysis
-                    if len(df_ta) >= 10:
-                        # Calculate trends over past 10 days
-                        recent_obv = df_ta["obv"].iloc[-10:].values
-                        recent_close = df_ta["Close"].iloc[-10:].values
-                        
-                        obv_trend = np.polyfit(range(len(recent_obv)), recent_obv, 1)[0]
-                        price_trend = np.polyfit(range(len(recent_close)), recent_close, 1)[0]
-                        
-                        st.subheader("Recent OBV Trend Analysis")
-                        
-                        # Display OBV and price trends with arrows
-                        col1, col2 = st.columns(2)
-                        obv_trend_str = "↗️ Rising" if obv_trend > 0 else "↘️ Falling"
-                        price_trend_str = "↗️ Rising" if price_trend > 0 else "↘️ Falling"
-                        
-                        col1.metric("OBV Trend", obv_trend_str)
-                        col2.metric("Price Trend", price_trend_str)
-                        
-                        # Interpretation based on OBV and price trends
-                        if obv_trend > 0 and price_trend > 0:
-                            st.success("🔵 Bullish confirmation - OBV and price are both rising, confirming the uptrend")
-                        elif obv_trend < 0 and price_trend < 0:
-                            st.error("🔴 Bearish confirmation - OBV and price are both falling, confirming the downtrend")
-                        elif obv_trend > 0 and price_trend < 0:
-                            st.info("⚠️ Bullish divergence - OBV rising while price falling may suggest a potential upward reversal")
-                        elif obv_trend < 0 and price_trend > 0:
-                            st.warning("⚠️ Bearish divergence - OBV falling while price rising may suggest a potential downward reversal")
-                    else:
-                        st.warning("Insufficient data for OBV trend analysis")
-                else:
-                    st.warning("Insufficient data to calculate On-Balance Volume")
-            
-            # Ichimoku Cloud Tab
-            with tabs[7]:
-                st.subheader("Ichimoku Cloud")
-                st.write("""
-                The Ichimoku Cloud is a collection of technical indicators that show support and resistance, momentum, and trend direction. It consists of:
-                - **Conversion Line (Tenkan-sen)**: 9-period average of high+low/2
-                - **Base Line (Kijun-sen)**: 26-period average of high+low/2
-                - **Leading Span A (Senkou Span A)**: Average of Conversion and Base Lines, plotted 26 periods ahead
-                - **Leading Span B (Senkou Span B)**: 52-period average of high+low/2, plotted 26 periods ahead
-                - **Lagging Span (Chikou Span)**: Current closing price, plotted 26 periods behind
-                
-                Key signals:
-                - Price above the cloud is bullish
-                - Price below the cloud is bearish
-                - Price inside the cloud indicates consolidation
-                - Cloud color (green when A > B, red when B > A) indicates trend bias
-                """)
-                
-                if "ichimoku_a" in df_ta.columns and "ichimoku_b" in df_ta.columns:
-                    # Create Ichimoku Cloud Chart
-                    fig_ichimoku = go.Figure()
-                    
-                    # Create cloud shape by filling area between Senkou Span A and B
-                    upper = np.maximum(df_ta['ichimoku_a'], df_ta['ichimoku_b'])
-                    lower = np.minimum(df_ta['ichimoku_a'], df_ta['ichimoku_b'])
-                    
-                    # Add candlestick chart
-                    fig_ichimoku.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ))
-                    
-                    # Add cloud fill
-                    for i in range(len(df_ta)):
-                        if not pd.isna(df_ta['ichimoku_a'].iloc[i]) and not pd.isna(df_ta['ichimoku_b'].iloc[i]):
-                            # Green cloud when Senkou Span A >= Senkou Span B (bullish)
-                            # Red cloud when Senkou Span A < Senkou Span B (bearish)
-                            color = 'rgba(0, 255, 0, 0.1)' if df_ta['ichimoku_a'].iloc[i] >= df_ta['ichimoku_b'].iloc[i] else 'rgba(255, 0, 0, 0.1)'
-                            
-                            fig_ichimoku.add_trace(go.Scatter(
-                                x=[df_ta.index[i], df_ta.index[i]],
-                                y=[lower[i], upper[i]],
-                                fill=None,
-                                mode='lines',
-                                line=dict(color=color, width=0),
-                                showlegend=False
-                            ))
-                    
-                    # Add Ichimoku lines
-                    fig_ichimoku.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['ichimoku_conversion'],
-                        name="Conversion Line (Tenkan-sen)",
-                        line=dict(color='blue', width=1)
-                    ))
-                    
-                    fig_ichimoku.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['ichimoku_base'],
-                        name="Base Line (Kijun-sen)",
-                        line=dict(color='red', width=1)
-                    ))
-                    
-                    fig_ichimoku.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['ichimoku_a'],
-                        name="Leading Span A (Senkou Span A)",
-                        line=dict(color='green', width=1)
-                    ))
-                    
-                    fig_ichimoku.add_trace(go.Scatter(
-                        x=df_ta.index,
-                        y=df_ta['ichimoku_b'],
-                        name="Leading Span B (Senkou Span B)",
-                        line=dict(color='purple', width=1)
-                    ))
-                    
-                    # Update layout
-                    fig_ichimoku.update_layout(
-                        title=f"{ticker_input} with Ichimoku Cloud",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_ichimoku, use_container_width=True)
-                    
-                    # Ichimoku Cloud Status
-                    if not pd.isna(df_ta['ichimoku_a'].iloc[-1]) and not pd.isna(df_ta['ichimoku_b'].iloc[-1]):
-                        latest_close = df_ta['Close'].iloc[-1]
-                        latest_conversion = df_ta['ichimoku_conversion'].iloc[-1]
-                        latest_base = df_ta['ichimoku_base'].iloc[-1]
-                        latest_span_a = df_ta['ichimoku_a'].iloc[-1]
-                        latest_span_b = df_ta['ichimoku_b'].iloc[-1]
-                        
-                        st.subheader("Current Ichimoku Cloud Status")
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Conversion Line", f"${latest_conversion:.2f}")
-                        col2.metric("Base Line", f"${latest_base:.2f}")
-                        col3.metric("Current Price", f"${latest_close:.2f}")
-                        
-                        col1, col2 = st.columns(2)
-                        col1.metric("Span A", f"${latest_span_a:.2f}")
-                        col2.metric("Span B", f"${latest_span_b:.2f}")
-                        
-                        # Cloud color
-                        cloud_bullish = latest_span_a >= latest_span_b
-                        cloud_color = "Green (Bullish)" if cloud_bullish else "Red (Bearish)"
-                        st.metric("Cloud Color", cloud_color)
-                        
-                        # Price position relative to cloud
-                        if latest_close > max(latest_span_a, latest_span_b):
-                            st.success("🔵 Price is above the cloud - bullish signal")
-                        elif latest_close < min(latest_span_a, latest_span_b):
-                            st.error("🔴 Price is below the cloud - bearish signal")
-                        else:
-                            st.warning("➡️ Price is inside the cloud - indicating indecision or consolidation")
-                        
-                        # Conversion/Base Line cross
-                        if latest_conversion > latest_base:
-                            st.success("🔵 Conversion Line is above Base Line - bullish signal")
-                        else:
-                            st.error("🔴 Conversion Line is below Base Line - bearish signal")
-                    else:
-                        st.warning("Some Ichimoku Cloud components could not be calculated due to insufficient data")
-                else:
-                    st.warning("Insufficient data to calculate Ichimoku Cloud (requires at least 52 periods)")
-            
-            # Fibonacci Retracement Tab
-            with tabs[8]:
-                st.subheader("Fibonacci Retracement")
-                st.write("""
-                Fibonacci Retracement uses horizontal lines to indicate potential support or resistance levels at which a price could reverse. The levels are derived from the Fibonacci sequence.
-                
-                Key Fibonacci Levels:
-                - 0.0% - Start of the retracement
-                - 23.6%, 38.2%, 50%, 61.8% - Key retracement levels
-                - 100% - Complete reversal to the original price
-                
-                These levels can act as:
-                - Support levels during an uptrend
-                - Resistance levels during a downtrend
-                """)
-                
-                if "fib_0" in df_ta.columns:
-                    # Create Fibonacci Chart
-                    fig_fib = go.Figure()
-                    
-                    # Add price
-                    fig_fib.add_trace(go.Candlestick(
-                        x=df_ta.index,
-                        open=df_ta['Open'],
-                        high=df_ta['High'],
-                        low=df_ta['Low'],
-                        close=df_ta['Close'],
-                        name="Price"
-                    ))
-                    
-                    # Add Fibonacci levels
-                    fib_levels = {
-                        "0%": df_ta["fib_0"].iloc[-1],
-                        "23.6%": df_ta["fib_23.6"].iloc[-1],
-                        "38.2%": df_ta["fib_38.2"].iloc[-1],
-                        "50%": df_ta["fib_50"].iloc[-1],
-                        "61.8%": df_ta["fib_61.8"].iloc[-1],
-                        "100%": df_ta["fib_100"].iloc[-1]
-                    }
-                    
-                    # Colors for different Fibonacci levels
-                    colors = ["blue", "purple", "green", "orange", "red", "black"]
-                    
-                    # Add horizontal lines for each Fibonacci level
-                    for i, (level, value) in enumerate(fib_levels.items()):
-                        fig_fib.add_trace(go.Scatter(
-                            x=[df_ta.index[0], df_ta.index[-1]],
-                            y=[value, value],
-                            mode="lines",
-                            name=f"Fib {level}",
-                            line=dict(color=colors[i], width=1, dash='dash')
-                        ))
-                    
-                    # Update layout
-                    fig_fib.update_layout(
-                        title=f"{ticker_input} with Fibonacci Retracement Levels",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        xaxis_rangeslider_visible=False,
-                        height=600
-                    )
-                    
-                    st.plotly_chart(fig_fib, use_container_width=True)
-                    
-                    # Fibonacci Analysis
-                    st.subheader("Fibonacci Retracement Levels")
-                    
-                    # Calculate price high and low points
-                    price_high = df_ta['High'].max()
-                    price_low = df_ta['Low'].min()
-                    current_price = df_ta['Close'].iloc[-1]
-                    
-                    # Check which Fibonacci level is closest to current price
-                    closest_fib = min(fib_levels.items(), key=lambda x: abs(x[1] - current_price))
-                    
-                    # Display all levels
-                    cols = st.columns(3)
-                    
-                    for i, (level, value) in enumerate(fib_levels.items()):
-                        col_idx = i % 3
-                        # Highlight the closest level
-                        if level == closest_fib[0]:
-                            cols[col_idx].metric(f"Fib {level}", f"${value:.2f} ⭐")
-                        else:
-                            cols[col_idx].metric(f"Fib {level}", f"${value:.2f}")
-                    
-                    # Interpretation based on closest level
-                    st.info(f"🔍 Current price (${current_price:.2f}) is closest to the {closest_fib[0]} Fibonacci retracement level (${closest_fib[1]:.2f}).")
-                    
-                    # Add context about direction
-                    if df_ta['Close'].iloc[-1] > df_ta['Close'].iloc[-10]:
-                        st.write("In the current uptrend, Fibonacci levels below the price may act as support if price pulls back.")
-                    else:
-                        st.write("In the current downtrend, Fibonacci levels above the price may act as resistance if price rebounds.")
-                else:
-                    st.warning("Insufficient data to calculate Fibonacci Retracement")
-            
             # Investment tips based on analysis
-            st.subheader("Fundamental Analysis")
+            st.subheader("Investment Analysis")
             
             tips = analyze_stock(hist, info, ratios)
             
@@ -1420,10 +686,3 @@ else:
     col3.write("- META (Meta)")
     col4.write("- NVDA (NVIDIA)")
     col4.write("- JPM (JPMorgan)")
-
-# Add navigation back to home
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Navigation")
-st.sidebar.page_link("home.py", label="🏠 Home", icon="🏠")
-st.sidebar.page_link("pages/1_Stock_Analysis.py", label="📈 Stock Analysis", icon="📈")
-st.sidebar.page_link("pages/2_Predictive_Analytics.py", label="🔮 Predictions", icon="🔮")
