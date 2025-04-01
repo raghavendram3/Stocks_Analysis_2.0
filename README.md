@@ -10,6 +10,7 @@ A powerful web application for stock analysis and visualization built with Strea
 - 🧠 **Predictive Analytics**: ML and statistical forecasting for stock price predictions
 - 💰 **Financial Metrics**: Access key financial ratios and metrics for investment analysis
 - 📋 **Data Downloads**: Export historical data and financial metrics as CSV files
+- 📝 **Anonymous Feedback**: Submit feedback, feature requests, and bug reports anonymously
 - 💡 **Investment Tips**: Get basic analysis and investment insights based on financial data
 
 ## Live Demo

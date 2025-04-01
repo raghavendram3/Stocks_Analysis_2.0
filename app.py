@@ -93,7 +93,7 @@ st.markdown("""
 
 # Additional features
 st.header("✨ Available Features")
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.subheader("🔮 Predictive Analytics")
@@ -107,6 +107,18 @@ with col1:
     st.page_link("pages/2_Predictive_Analytics.py", label="Try Price Predictions", icon="🔮", use_container_width=True)
 
 with col2:
+    st.subheader("📝 User Feedback")
+    st.markdown("""
+    We value your opinions and suggestions! You can:
+    
+    - Submit anonymous feedback
+    - Request new features
+    - Report bugs or issues
+    - Ask questions about the platform
+    """)
+    st.page_link("pages/3_User_Feedback.py", label="Share Your Feedback", icon="📝", use_container_width=True)
+
+with col3:
     st.subheader("🚀 Features Coming Soon")
     st.markdown("""
     We're constantly improving! Watch for these upcoming features:
