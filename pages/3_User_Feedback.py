@@ -11,6 +11,49 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom CSS for modern look
+st.markdown("""
+<style>
+    .main {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #eee;
+    }
+    .feedback-form {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+    .feedback-item {
+        background-color: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    [data-testid="stExpander"] {
+        background-color: white;
+        border-radius: 8px;
+        margin: 10px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stSelectbox {
+        background-color: white;
+        border-radius: 4px;
+    }
+    .stTextInput > div > div {
+        background-color: white;
+    }
+    .stTextArea > div > div {
+        background-color: white;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Create data directory if it doesn't exist
 data_dir = Path("./data")
 feedback_file = data_dir / "feedback.json"

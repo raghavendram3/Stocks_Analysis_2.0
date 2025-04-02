@@ -8,6 +8,54 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom CSS for modern look
+st.markdown("""
+<style>
+    .main {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa;
+        border-right: 1px solid #eee;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #fff;
+        border-radius: 4px;
+        color: #37474F;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        background-color: #1E88E5;
+    }
+    .metric-container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem;
+    }
+    .plot-container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stDataFrame {
+        background-color: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Inject Google Tag Manager
 inject_google_tag_manager()
 
