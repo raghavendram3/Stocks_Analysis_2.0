@@ -13,12 +13,6 @@ A powerful web application for stock analysis and visualization built with Strea
 - 📝 **Anonymous Feedback**: Submit feedback, feature requests, and bug reports anonymously
 - 💡 **Investment Tips**: Get basic analysis and investment insights based on financial data
 
-## Live Demo
-
-[Access StockTrackPro here](https://stocktrackpro.streamlit.app) *(Update this link once deployed)*
-
-## Installation
-
 ### Local Setup
 
 1. Clone this repository:
@@ -80,14 +74,6 @@ You can customize the width, height, and styling of the embedded app by modifyin
 - [Scikit-learn](https://scikit-learn.org/) - Machine learning models
 - [Prophet](https://facebook.github.io/prophet/) - Time series forecasting
 
-## Deployment
-
-This application can be deployed to:
-
-- [Streamlit Cloud](https://streamlit.io/cloud)
-- [Heroku](https://heroku.com)
-- [Replit](https://replit.com)
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -96,4 +82,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Stock data provided by Yahoo Finance
 - Technical indicators based on Investopedia recommendations
-- Built with ❤️ by [Your Name]
+- Built with ❤️ by Raghavendra
